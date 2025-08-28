@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { memory } from "@/lib/store";
+import { firebaseStore } from "@/lib/firebase-store";
 import { pusherServer } from "@/lib/pusher";
 
 export async function POST(req: NextRequest) {
-  const { roomId, playerId } = await req.json();
-  if (!roomId || !playerId) {
-    return NextResponse.json({ error: "Missing roomId or playerId" }, { status: 400 });
-  }
-  
   try {
-    const room = memory.getRoom(roomId);
+    const { roomId, playerId } = await req.json();
+    if (!roomId || !playerId) {
+      return NextResponse.json({ error: "Missing roomId or playerId" }, { status: 400 });
+    }
+    
+    const room = await firebaseStore.getRoom(roomId);
     if (!room) {
       return NextResponse.json({ error: "Room not found" }, { status: 404 });
     }
@@ -21,29 +21,33 @@ export async function POST(req: NextRequest) {
     }
 
     const removedPlayer = room.players[playerIndex];
-    room.players.splice(playerIndex, 1);
-
-    // If room is empty, delete it
-    if (room.players.length === 0) {
-      memory.rooms.delete(roomId);
+    
+    // Use Firebase store to handle player leaving
+    const updatedRoom = await firebaseStore.leaveRoom(roomId, playerId);
+    
+    if (!updatedRoom) {
+      // Room was deleted (no players left)
+      await pusherServer.trigger(`room-${roomId}`, "room-deleted", {});
       return NextResponse.json({ ok: true, roomDeleted: true });
     }
 
     // If the leaving player was the owner, assign ownership to the next player
     if (room.ownerId === playerId) {
-      room.ownerId = room.players[0].id;
+      await firebaseStore.updateRoom(roomId, { ownerId: updatedRoom.players[0].id });
+      updatedRoom.ownerId = updatedRoom.players[0].id;
     }
 
     // Notify other players about the leave
     await pusherServer.trigger(`room-${roomId}`, "player-left", {
       playerId: playerId,
       playerName: removedPlayer.name,
-      players: room.players,
-      newOwnerId: room.ownerId,
+      players: updatedRoom.players,
+      newOwnerId: updatedRoom.ownerId,
     });
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
+    console.error("Error leaving room:", e);
     return NextResponse.json({ error: e.message }, { status: 400 });
   }
 }

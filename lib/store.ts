@@ -153,4 +153,10 @@ class Memory {
   }
 }
 
+// Legacy export for backward compatibility
+// The memory store has been replaced with Firebase Firestore
+// Use firebaseStore from './firebase-store' instead
 export const memory = new Memory();
+
+// Export Firebase store as the primary store
+export { firebaseStore } from './firebase-store';

@@ -1,6 +1,53 @@
 @import "tailwindcss";
 
+:root {
+  color-scheme: light;
+}
+html,
+body {
+  height: 100%;
+}
 
-:root { color-scheme: light; }
-html, body { height: 100%; }
+/* Custom error toast styling */
+.Toastify__toast--error {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
 
+.Toastify__toast--error .Toastify__toast-icon {
+  margin: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+.Toastify__toast--error .Toastify__toast-body {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Custom error toast class */
+.error-toast-custom {
+  width: 98% !important;
+  margin: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  color: white !important;
+  @apply rounded-lg border border-white/30 bg-white/10 shadow-lg;
+}
+
+.error-toast-custom .Toastify__toast-icon {
+  margin: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+.error-toast-custom .Toastify__toast-body {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}

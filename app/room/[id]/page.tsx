@@ -9,6 +9,9 @@ import create from "@/app/assets/images/create.png";
 import leave from "@/app/assets/images/leave.png";
 import detective from "@/app/assets/images/detective.png";
 import { CloseButtonProps, ToastContainer, toast } from "react-toastify";
+import { showErrorToast } from "@/lib/toast-utils";
+import { useConfirmationModal } from "@/lib/useConfirmationModal";
+import ConfirmationModal from "@/components/ConfirmationModal";
 
 function useChannel(roomId: string, on: (type: string, payload: any) => void) {
   useEffect(() => {
@@ -45,6 +48,10 @@ export default function RoomPage() {
   const [myWord, setMyWord] = useState<string | null>(null);
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [myHint, setMyHint] = useState<string | null>(null);
+
+  // Confirmation modal
+  const { isOpen, openModal, closeModal, modalConfig, handleConfirm } =
+    useConfirmationModal();
 
   // Overlay state
   const [showOverlay, setShowOverlay] = useState(false);
@@ -142,7 +149,10 @@ export default function RoomPage() {
       fetch("/api/room/loaded", {
         method: "POST",
         body: JSON.stringify({ roomId, playerId }),
-      }).catch(() => {});
+      }).catch((error) => {
+        console.error("Error updating room loaded status:", error);
+        // Don't show toast for this as it's not critical
+      });
     }
     if (type === "player-left") {
       // Only show a toast if the player who left is not the current player
@@ -186,6 +196,10 @@ export default function RoomPage() {
           setMyRole(d.role);
           setMyWord(d.word);
           setMyHint(d.hint ?? null);
+        })
+        .catch((error) => {
+          console.error("Error fetching game private view:", error);
+          showErrorToast("Failed to load game role. Please refresh the page.");
         });
     }
     if (type === "game-ended") {
@@ -205,6 +219,10 @@ export default function RoomPage() {
           setMyWord(d.word);
           setMyHint(d.hint ?? null);
         }
+      })
+      .catch((error) => {
+        console.error("Error fetching private view:", error);
+        showErrorToast("Failed to load game state. Please refresh the page.");
       });
   }, [roomId, playerId]);
 
@@ -222,31 +240,65 @@ export default function RoomPage() {
             setOwnerId(d.players[0].id);
           }
         })
-        .catch(() => {});
+        .catch((error) => {
+          console.error("Error loading room info:", error);
+          showErrorToast(
+            "Failed to load room information. Please refresh the page."
+          );
+        });
     }
   }, [roomId, playerId, ownerId]);
 
   async function startGame() {
-    await fetch("/api/game/start", {
-      method: "POST",
-      body: JSON.stringify({ roomId }),
-    });
-    setShowOverlay(true);
+    try {
+      const res = await fetch("/api/game/start", {
+        method: "POST",
+        body: JSON.stringify({ roomId }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        showErrorToast("Failed to start game: " + data.error);
+      } else {
+        setShowOverlay(true);
+      }
+    } catch (error) {
+      console.error("Error starting game:", error);
+      showErrorToast("Failed to start game. Please try again.");
+    }
   }
 
   async function endRound() {
-    await fetch("/api/game/end", {
-      method: "POST",
-      body: JSON.stringify({ roomId }),
-    });
-    setShowOverlay(false); // Hide overlay on end round
+    try {
+      const res = await fetch("/api/game/end", {
+        method: "POST",
+        body: JSON.stringify({ roomId }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        showErrorToast("Failed to end game: " + data.error);
+      } else {
+        setShowOverlay(false); // Hide overlay on end round
+      }
+    } catch (error) {
+      console.error("Error ending game:", error);
+      showErrorToast("Failed to end game. Please try again.");
+    }
   }
 
   async function newGame() {
-    await fetch("/api/game/new", {
-      method: "POST",
-      body: JSON.stringify({ roomId }),
-    });
+    try {
+      const res = await fetch("/api/game/new", {
+        method: "POST",
+        body: JSON.stringify({ roomId }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        showErrorToast("Failed to start new game: " + data.error);
+      }
+    } catch (error) {
+      console.error("Error starting new game:", error);
+      showErrorToast("Failed to start new game. Please try again.");
+    }
   }
 
   // Styles to match the home page, but with white text
@@ -442,20 +494,41 @@ export default function RoomPage() {
       <div className={card}>
         <div className="flex items-center justify-between mb-2">
           <span className={chip}>
-            <Image src={key} alt="Room" className="inline w-5 h-5 mr-1" width={20} height={20} />
+            <Image
+              src={key}
+              alt="Room"
+              className="inline w-5 h-5 mr-1"
+              width={20}
+              height={20}
+            />
             <span className="tracking-widest font-mono text-base text-white">
               {roomId}
             </span>
           </span>
           <span className={chip}>
-            <Image src={leave} alt="Leave" className="inline w-5 h-5 mr-1" width={20} height={20} />
+            <Image
+              src={leave}
+              alt="Leave"
+              className="inline w-5 h-5 mr-1"
+              width={20}
+              height={20}
+            />
             <button
               type="button"
               className="flex items-center gap-1 px-[1px] py-1 transition-colors cursor-pointer"
               title="Leave room"
               style={{ pointerEvents: "auto" }}
               onClick={async () => {
-                if (window.confirm("Leave the room?")) {
+                const confirmed = await openModal({
+                  title: "Leave Room",
+                  message:
+                    "Are you sure you want to leave this room? You will need to rejoin if you want to play again.",
+                  confirmText: "Leave Room",
+                  cancelText: "Stay",
+                  type: "warning",
+                });
+
+                if (confirmed) {
                   try {
                     const res = await fetch("/api/room/leave", {
                       method: "POST",
@@ -470,14 +543,14 @@ export default function RoomPage() {
                       sessionStorage.removeItem("playerAvatarFull");
                       window.location.href = "/";
                     } else {
-                      alert(
+                      toast.error(
                         "Failed to leave room: " +
                           (data.error || "Unknown error")
                       );
                     }
                   } catch (error) {
                     console.error("Error leaving room:", error);
-                    alert("Failed to leave room. Please try again.");
+                    toast.error("Failed to leave room. Please try again.");
                   }
                 }
               }}
@@ -524,7 +597,9 @@ export default function RoomPage() {
                   <span className="text-white/70 text-xs font-mono">
                     {p.id === playerId ? (
                       <>
-                        <span className="font-bold text-yellow-300 mr-2">You</span>
+                        <span className="font-bold text-yellow-300 mr-2">
+                          You
+                        </span>
                         <span className="text-orange-300 font-semibold">
                           <img
                             src={detective.src}
@@ -556,7 +631,13 @@ export default function RoomPage() {
       {phase === "lobby" && (
         <div className={card + " bg-teal-100/10"}>
           <div className="flex items-center gap-2 mb-2">
-            <Image src={create} alt="Start" className="inline w-6 h-6" width={24} height={24} />
+            <Image
+              src={create}
+              alt="Start"
+              className="inline w-6 h-6"
+              width={24}
+              height={24}
+            />
             <span className="text-white text-base font-semibold">
               Waiting for players...
             </span>
@@ -642,6 +723,21 @@ export default function RoomPage() {
             </p>
           </div>
         ))}
+
+      {/* Confirmation Modal */}
+      {modalConfig && (
+        <ConfirmationModal
+          isOpen={isOpen}
+          onClose={closeModal}
+          onConfirm={handleConfirm}
+          title={modalConfig.title}
+          message={modalConfig.message}
+          confirmText={modalConfig.confirmText}
+          cancelText={modalConfig.cancelText}
+          type={modalConfig.type}
+        />
+      )}
+
       <div
         style={{
           position: "fixed",
@@ -669,6 +765,11 @@ export default function RoomPage() {
             "rounded-lg border border-white/30 p-5 grid gap-4 bg-white/10 shadow-lg m-2"
           }
           className={() => "text-white text-base"}
+          toastStyle={
+            {
+              "--toastify-icon-color-error": "#ef4444",
+            } as React.CSSProperties
+          }
         />
       </div>
     </main>

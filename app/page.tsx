@@ -7,6 +7,8 @@ import door from "@/app/assets/images/door.png";
 import create from "@/app/assets/images/create.png";
 import player from "@/app/assets/images/player.png";
 import key from "@/app/assets/images/key.png";
+import { CloseButtonProps, ToastContainer } from "react-toastify";
+import { showErrorToast } from "@/lib/toast-utils";
 // Example avatar icons (add more as needed)
 import sonamIcon from "@/app/assets/images/sonam-icon.png";
 import tseringIcon from "@/app/assets/images/tsering-icon.png";
@@ -82,7 +84,9 @@ export default function Home() {
       sessionStorage.setItem("playerAvatar", avatar);
       sessionStorage.setItem("playerAvatarFull", avatarFull);
       r.push(`/room/${data.roomId}`);
-    } else alert(data.error || "Failed");
+    } else {
+      showErrorToast(data.error || "Failed to create room");
+    }
   }
 
   async function joinRoom() {
@@ -100,7 +104,9 @@ export default function Home() {
       sessionStorage.setItem("playerAvatar", avatar);
       sessionStorage.setItem("playerAvatarFull", avatarFull);
       r.push(`/room/${code}`);
-    } else alert(data.error || "Failed");
+    } else {
+      showErrorToast(data.error || "Failed to join room");
+    }
   }
 
   const inputCls =
@@ -175,7 +181,13 @@ export default function Home() {
               type="button"
               aria-selected={tab === "join"}
             >
-              <Image src={door} alt="Enter" className="inline w-6 h-6 mr-1 align-text-bottom" width={24} height={24} />{" "}
+              <Image
+                src={door}
+                alt="Enter"
+                className="inline w-6 h-6 mr-1 align-text-bottom"
+                width={24}
+                height={24}
+              />{" "}
               Join
             </button>
             <button
@@ -188,7 +200,13 @@ export default function Home() {
               type="button"
               aria-selected={tab === "create"}
             >
-              <Image src={create} alt="Enter" className="inline w-6 h-6 mr-1 align-text-bottom" width={24} height={24} />{" "}
+              <Image
+                src={create}
+                alt="Enter"
+                className="inline w-6 h-6 mr-1 align-text-bottom"
+                width={24}
+                height={24}
+              />{" "}
               Create
             </button>
           </div>
@@ -198,7 +216,13 @@ export default function Home() {
               <>
                 <AvatarSelector />
                 <div className="flex items-center gap-2">
-                  <Image src={selectedAvatar.icon} alt={selectedAvatar.alt} className="inline w-6 h-6 mr-1 align-text-bottom" width={24} height={24} />
+                  <Image
+                    src={selectedAvatar.icon}
+                    alt={selectedAvatar.alt}
+                    className="inline w-6 h-6 mr-1 align-text-bottom"
+                    width={24}
+                    height={24}
+                  />
                   <input
                     className="flex-1 border-b border-white/40 bg-transparent px-2 py-2 text-white placeholder-white/60 outline-none text-lg"
                     placeholder="Your name"
@@ -209,7 +233,13 @@ export default function Home() {
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  <Image src={key} alt="Enter" className="inline w-6 h-6 mr-1 align-text-bottom" width={24} height={24} />
+                  <Image
+                    src={key}
+                    alt="Enter"
+                    className="inline w-6 h-6 mr-1 align-text-bottom"
+                    width={24}
+                    height={24}
+                  />
 
                   <input
                     className="flex-1 border-b border-white/40 bg-transparent px-2 py-2 text-white placeholder-white/60 outline-none text-lg tracking-widest uppercase"
@@ -234,7 +264,13 @@ export default function Home() {
               <>
                 <AvatarSelector />
                 <div className="flex items-center gap-2">
-                  <Image src={selectedAvatar.icon} alt={selectedAvatar.alt} className="inline w-6 h-6 mr-1 align-text-bottom" width={24} height={24} />
+                  <Image
+                    src={selectedAvatar.icon}
+                    alt={selectedAvatar.alt}
+                    className="inline w-6 h-6 mr-1 align-text-bottom"
+                    width={24}
+                    height={24}
+                  />
                   <input
                     className="flex-1 border-b border-white/40 bg-transparent px-2 py-2 text-white placeholder-white/60 outline-none text-lg"
                     placeholder="Your name"
@@ -262,6 +298,42 @@ export default function Home() {
           </div>
         </div>
       </main>
+
+      {/* Toast Container */}
+      <div
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: "100vw",
+          maxWidth: "100vw",
+          zIndex: 9999,
+          pointerEvents: "none",
+        }}
+      >
+        <ToastContainer
+          position="bottom-center"
+          autoClose={2000}
+          closeButton={({ closeToast }: CloseButtonProps) => {
+            return <button onClick={closeToast} className="absolute"></button>;
+          }}
+          hideProgressBar
+          newestOnTop
+          closeOnClick
+          rtl={false}
+          draggable
+          toastClassName={() =>
+            "rounded-lg border border-white/30 p-5 grid gap-4 bg-white/10 shadow-lg m-2"
+          }
+          className={() => "text-white text-base"}
+          // toastStyle={
+          //   {
+          //     "--toastify-icon-color-error": "#ef4444",
+          //   } as React.CSSProperties
+          // }
+        />
+      </div>
     </div>
   );
 }
