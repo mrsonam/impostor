@@ -1,8 +1,8 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, memo, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Image from "next/image";
-import player from "@/app/assets/images/player.png";
+import playerIcon from "@/app/assets/images/player.png";
 import key from "@/app/assets/images/key.png";
 import playersIcon from "@/app/assets/images/players.png";
 import create from "@/app/assets/images/create.png";
@@ -12,6 +12,36 @@ import { CloseButtonProps, ToastContainer, toast } from "react-toastify";
 import { showErrorToast } from "@/lib/toast-utils";
 import { useConfirmationModal } from "@/lib/useConfirmationModal";
 import ConfirmationModal from "@/components/ConfirmationModal";
+
+// Custom hook for safely accessing sessionStorage
+function useSessionStorage(key: string, defaultValue: string = "") {
+  const [value, setValue] = useState(defaultValue);
+  
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = sessionStorage.getItem(key);
+      if (stored !== null) {
+        setValue(stored);
+      }
+    }
+  }, [key]);
+  
+  const updateValue = useCallback((newValue: string) => {
+    setValue(newValue);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(key, newValue);
+    }
+  }, [key]);
+  
+  const removeValue = useCallback(() => {
+    setValue(defaultValue);
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem(key);
+    }
+  }, [key, defaultValue]);
+  
+  return [value, updateValue, removeValue] as const;
+}
 
 function useChannel(roomId: string, on: (type: string, payload: any) => void) {
   useEffect(() => {
@@ -41,13 +71,14 @@ function useChannel(roomId: string, on: (type: string, payload: any) => void) {
 
 export default function RoomPage() {
   const { id: roomId } = useParams<{ id: string }>();
-  const playerId = useMemo(() => sessionStorage.getItem("playerId") || "", []);
+  const [playerId, setPlayerId, removePlayerId] = useSessionStorage("playerId", "");
   const [players, setPlayers] = useState<any[]>([]);
   const [phase, setPhase] = useState<"lobby" | "round" | "end">("lobby");
   const [myRole, setMyRole] = useState<null | "impostor" | "civilian">(null);
   const [myWord, setMyWord] = useState<string | null>(null);
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [myHint, setMyHint] = useState<string | null>(null);
+  const [showHints, setShowHints] = useState(true);
 
   // Confirmation modal
   const { isOpen, openModal, closeModal, modalConfig, handleConfirm } =
@@ -146,13 +177,22 @@ export default function RoomPage() {
       if (payload.players && payload.players.length > 0) {
         setOwnerId(payload.players[0].id);
       }
-      fetch("/api/room/loaded", {
-        method: "POST",
-        body: JSON.stringify({ roomId, playerId }),
-      }).catch((error) => {
-        console.error("Error updating room loaded status:", error);
-        // Don't show toast for this as it's not critical
-      });
+      // Get the current room state to sync the UI properly for new players
+      fetch(`/api/room/state?roomId=${roomId}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.phase) {
+            setPhase(data.phase);
+            // Only show overlay if there's an active game
+            setShowOverlay(data.phase === "round" && data.game?.hasActiveGame);
+          }
+          if (data.showHints !== undefined) {
+            setShowHints(data.showHints);
+          }
+        })
+        .catch((error) => {
+          console.error("Error fetching room state:", error);
+        });
     }
     if (type === "player-left") {
       // Only show a toast if the player who left is not the current player
@@ -165,14 +205,11 @@ export default function RoomPage() {
       if (payload.newOwnerId) {
         setOwnerId(payload.newOwnerId);
       }
-      // If the current player left, redirect to home
-      if (payload.playerId === playerId) {
-        sessionStorage.removeItem("playerId");
-        sessionStorage.removeItem("playerName");
-        sessionStorage.removeItem("playerAvatar");
-        sessionStorage.removeItem("playerAvatarFull");
-        window.location.href = "/";
-      }
+                     // If the current player left, redirect to home
+        if (payload.playerId === playerId) {
+          removePlayerId();
+          window.location.href = "/";
+        }
     }
     if (type === "room-loaded") {
       setPlayers(payload.players);
@@ -196,6 +233,10 @@ export default function RoomPage() {
           setMyRole(d.role);
           setMyWord(d.word);
           setMyHint(d.hint ?? null);
+
+          // Game just started, so it's definitely active
+          setPhase("round");
+          setShowOverlay(true);
         })
         .catch((error) => {
           console.error("Error fetching game private view:", error);
@@ -207,17 +248,48 @@ export default function RoomPage() {
       setPhase("end");
       setShowOverlay(false); // Hide overlay on end round
     }
+    if (type === "hints-toggled") {
+      setShowHints(payload.showHints);
+      toast(
+        `Hints ${payload.showHints ? "enabled" : "disabled"} for impostors`,
+        {
+          toastId: "hints-toggled",
+        }
+      );
+      
+      // If hints were enabled and there's an active game, refresh the private view to get the hint
+      if (payload.showHints && phase === "round" && myRole === "impostor") {
+        fetch(`/api/game/private-view?roomId=${roomId}&playerId=${playerId}`)
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.hint) {
+              setMyHint(d.hint);
+            }
+          })
+          .catch((error) => {
+            console.error("Error refreshing private view after hint toggle:", error);
+          });
+      }
+    }
   });
 
   useEffect(() => {
     fetch(`/api/game/private-view?roomId=${roomId}&playerId=${playerId}`)
       .then((r) => r.json())
       .then((d) => {
-        if (d.role) {
-          setPhase("round");
+        if (d.role && d.isActive) {
           setMyRole(d.role);
           setMyWord(d.word);
           setMyHint(d.hint ?? null);
+
+          // Only set phase to round and show overlay if the game is actually active
+          setPhase("round");
+          setShowOverlay(true);
+        } else {
+          // Clear any old game state if the game is not active
+          setMyRole(null);
+          setMyWord(null);
+          setMyHint(null);
         }
       })
       .catch((error) => {
@@ -226,28 +298,47 @@ export default function RoomPage() {
       });
   }, [roomId, playerId]);
 
-  // On initial mount, fetch room info to get ownerId if not already set
+  // On initial mount, fetch room info to get ownerId and sync state
   useEffect(() => {
-    if (!ownerId) {
-      fetch(`/api/room/loaded`, {
-        method: "POST",
-        body: JSON.stringify({ roomId, playerId }),
+    fetch(`/api/room/state?roomId=${roomId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.players && data.players.length > 0) {
+          setPlayers(data.players);
+          setOwnerId(data.players[0].id);
+        }
+        if (data.phase) {
+          setPhase(data.phase);
+          // Only show overlay if there's an active game
+          setShowOverlay(data.phase === "round" && data.game?.hasActiveGame);
+        }
+        if (data.showHints !== undefined) {
+          setShowHints(data.showHints);
+        }
       })
+      .catch((error) => {
+        console.error("Error loading room state:", error);
+        showErrorToast(
+          "Failed to load room information. Please refresh the page."
+        );
+      });
+  }, [roomId]);
+
+  // Refresh private view when showHints changes to ensure hints are displayed correctly
+  useEffect(() => {
+    if (showHints && phase === "round" && myRole === "impostor") {
+      fetch(`/api/game/private-view?roomId=${roomId}&playerId=${playerId}`)
         .then((r) => r.json())
         .then((d) => {
-          // d.players is returned by /api/room/loaded
-          if (d.players && d.players.length > 0) {
-            setOwnerId(d.players[0].id);
+          if (d.hint) {
+            setMyHint(d.hint);
           }
         })
         .catch((error) => {
-          console.error("Error loading room info:", error);
-          showErrorToast(
-            "Failed to load room information. Please refresh the page."
-          );
+          console.error("Error refreshing private view after hint change:", error);
         });
     }
-  }, [roomId, playerId, ownerId]);
+  }, [showHints, phase, myRole, roomId, playerId]);
 
   async function startGame() {
     try {
@@ -301,6 +392,22 @@ export default function RoomPage() {
     }
   }
 
+  async function toggleHints() {
+    try {
+      const res = await fetch("/api/room/toggle-hints", {
+        method: "POST",
+        body: JSON.stringify({ roomId, playerId }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        showErrorToast("Failed to toggle hints: " + data.error);
+      }
+    } catch (error) {
+      console.error("Error toggling hints:", error);
+      showErrorToast("Failed to toggle hints. Please try again.");
+    }
+  }
+
   // Styles to match the home page, but with white text
   const card =
     "rounded-lg border border-white/30 p-5 grid gap-4 bg-white/10 shadow-lg";
@@ -326,6 +433,29 @@ export default function RoomPage() {
   const myPlayerNameCaps = myPlayer?.name
     ? String(myPlayer.name).toUpperCase()
     : "";
+
+  // Memoize image sources to prevent reloading on state changes
+  const myAvatarSrc = useMemo(() => {
+    const player = players.find((p) => p.id === playerId);
+    return player?.avatarFull || player?.avatar || playerIcon.src;
+  }, [players, playerId]);
+
+  const playerAvatarSrcs = useMemo(() => {
+    return players.map(p => ({
+      id: p.id,
+      src: p.avatar || playerIcon.src
+    }));
+  }, [players]);
+
+  // Memoize static image sources to prevent unnecessary re-renders
+  const staticImages = useMemo(() => ({
+    key: key.src,
+    leave: leave.src,
+    playersIcon: playersIcon.src,
+    create: create.src,
+    player: playerIcon.src,
+    detective: detective.src
+  }), []);
 
   return (
     <main className="grid gap-4">
@@ -396,27 +526,23 @@ export default function RoomPage() {
               </span>
             </div>
           )}
-          <Image
-            src={
-              players.find((p) => p.id === playerId)?.avatarFull ||
-              players.find((p) => p.id === playerId)?.avatar ||
-              player.src
-            }
-            alt="Swipe up"
-            fill
-            style={{
-              objectFit: "cover",
-              position: "absolute",
-              left: 0,
-              top: 0,
-              zIndex: 1,
-              pointerEvents: "none",
-              userSelect: "none",
-            }}
-            priority
-            sizes="100vw"
-            draggable={false}
-          />
+                     <Image
+             src={myAvatarSrc}
+             alt="Swipe up"
+             fill
+             style={{
+               objectFit: "cover",
+               position: "absolute",
+               left: 0,
+               top: 0,
+               zIndex: 1,
+               pointerEvents: "none",
+               userSelect: "none",
+             }}
+             priority
+             sizes="100vw"
+             draggable={false}
+           />
           {/* End Round button on top of overlay image */}
           {showOverlayEndRoundButton && (
             <div
@@ -493,26 +619,26 @@ export default function RoomPage() {
       {/* Room info card */}
       <div className={card}>
         <div className="flex items-center justify-between mb-2">
-          <span className={chip}>
-            <Image
-              src={key}
-              alt="Room"
-              className="inline w-5 h-5 mr-1"
-              width={20}
-              height={20}
-            />
-            <span className="tracking-widest font-mono text-base text-white">
-              {roomId}
-            </span>
-          </span>
-          <span className={chip}>
-            <Image
-              src={leave}
-              alt="Leave"
-              className="inline w-5 h-5 mr-1"
-              width={20}
-              height={20}
-            />
+                     <span className={chip}>
+             <Image
+               src={staticImages.key}
+               alt="Room"
+               className="inline w-5 h-5 mr-1"
+               width={20}
+               height={20}
+             />
+             <span className="tracking-widest font-mono text-base text-white">
+               {roomId}
+             </span>
+           </span>
+           <span className={chip}>
+             <Image
+               src={staticImages.leave}
+               alt="Leave"
+               className="inline w-5 h-5 mr-1"
+               width={20}
+               height={20}
+             />
             <button
               type="button"
               className="flex items-center gap-1 px-[1px] py-1 transition-colors cursor-pointer"
@@ -535,14 +661,11 @@ export default function RoomPage() {
                       body: JSON.stringify({ roomId, playerId }),
                     });
                     const data = await res.json();
-                    if (data.ok) {
-                      // Clear session storage and redirect
-                      sessionStorage.removeItem("playerId");
-                      sessionStorage.removeItem("playerName");
-                      sessionStorage.removeItem("playerAvatar");
-                      sessionStorage.removeItem("playerAvatarFull");
-                      window.location.href = "/";
-                    } else {
+                                                                 if (data.ok) {
+                         // Clear session storage and redirect
+                         removePlayerId();
+                         window.location.href = "/";
+                       } else {
                       toast.error(
                         "Failed to leave room: " +
                           (data.error || "Unknown error")
@@ -560,40 +683,77 @@ export default function RoomPage() {
             </button>
           </span>
         </div>
+        {/* Hint toggle for owner */}
+        {isOwner && (
+          <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/20 mb-4">
+            <div className="flex flex-col">
+              <span className="text-white text-sm font-medium">
+                Show hints for impostors
+              </span>
+              <span className="text-white/60 text-xs">
+                (Helps impostors blend in)
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                // Optimistically update UI
+                setShowHints((prev: boolean) => !prev);
+                try {
+                  await toggleHints();
+                } catch (e) {
+                  // Revert if failed
+                  setShowHints((prev: boolean) => !prev);
+                }
+              }}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                showHints ? "bg-blue-500" : "bg-gray-400"
+              }`}
+              style={{ flexShrink: 0 }}
+              aria-label="Toggle hints for impostors"
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  showHints ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+        )}
         {/* Hide player list when game is ongoing (phase === "round") */}
         {phase !== "round" && (
           <div>
-            <h3 className="text-white text-lg font-bold mb-2 flex items-center gap-2">
-              <Image
-                src={playersIcon}
-                alt="Players"
-                className="inline w-6 h-6"
-                width={24}
-                height={24}
-              />
-              Players
-            </h3>
+                         <h3 className="text-white text-lg font-bold mb-2 flex items-center gap-2">
+               <Image
+                 src={staticImages.playersIcon}
+                 alt="Players"
+                 className="inline w-6 h-6"
+                 width={24}
+                 height={24}
+               />
+               Players
+             </h3>
             <ul className="grid gap-2">
-              {players.map((p: any, idx: number) => (
-                <li
-                  key={p.id}
-                  className="flex items-center justify-between rounded-xl bg-white/10 border border-white/40 px-3 py-2"
-                >
-                  <span className="text-white font-semibold flex items-center gap-2">
-                    <Image
-                      src={p.avatar || player.src}
-                      alt={p.name}
-                      className="inline w-5 h-5 rounded-full"
-                      width={20}
-                      height={20}
-                    />
-                    {p.name}
-                    {idx === 0 && (
-                      <span className="ml-2 px-2 py-0.5 rounded bg-yellow-400/30 text-yellow-200 text-xs font-bold">
-                        Creator
-                      </span>
-                    )}
-                  </span>
+                             {players.map((p: any, idx: number) => (
+                 <li
+                   key={`${p.id}-${p.avatar}-${p.impostorCount}`}
+                   className="flex items-center justify-between rounded-xl bg-white/10 border border-white/40 px-3 py-2"
+                 >
+                                     <span className="text-white font-semibold flex items-center gap-2">
+                     <Image
+                                               src={playerAvatarSrcs.find(avatar => avatar.id === p.id)?.src || playerIcon.src}
+                       alt={p.name}
+                       className="inline w-5 h-5 rounded-full"
+                       width={20}
+                       height={20}
+                     />
+                     {p.name}
+                     {idx === 0 && (
+                       <span className="ml-2 px-2 py-0.5 rounded bg-yellow-400/30 text-yellow-200 text-xs font-bold">
+                         Creator
+                       </span>
+                     )}
+                   </span>
                   <span className="text-white/70 text-xs font-mono">
                     {p.id === playerId ? (
                       <>
@@ -630,18 +790,18 @@ export default function RoomPage() {
       {/* Lobby phase */}
       {phase === "lobby" && (
         <div className={card + " bg-teal-100/10"}>
-          <div className="flex items-center gap-2 mb-2">
-            <Image
-              src={create}
-              alt="Start"
-              className="inline w-6 h-6"
-              width={24}
-              height={24}
-            />
-            <span className="text-white text-base font-semibold">
-              Waiting for players...
-            </span>
-          </div>
+                     <div className="flex items-center gap-2 mb-2">
+             <Image
+               src={staticImages.create}
+               alt="Start"
+               className="inline w-6 h-6"
+               width={24}
+               height={24}
+             />
+             <span className="text-white text-base font-semibold">
+               Waiting for players...
+             </span>
+           </div>
           <p className="text-white/80 text-sm mb-2">
             At least <span className="font-bold text-white">3 players</span>{" "}
             required. Voting is done in person.
@@ -686,9 +846,11 @@ export default function RoomPage() {
             }}
           >
             {myRole === "impostor"
-              ? myHint
+              ? showHints && myHint
                 ? `Hint: ${myHint}`
-                : "No hint"
+                : showHints
+                ? "No hint available"
+                : "Hints disabled"
               : myWord}
           </div>
           {/* Remove End Round button from here, now on overlay */}
@@ -712,7 +874,7 @@ export default function RoomPage() {
         ) : (
           <div className={card + " bg-teal-100/10"}>
             <div className="flex items-center gap-2 mb-2">
-              <img src={create.src} alt="Start" className="inline w-6 h-6" />
+              <Image src={staticImages.create} alt="Start" className="inline w-6 h-6" width={24} height={24} />
               <span className="text-white text-base font-semibold">
                 Waiting for players...
               </span>

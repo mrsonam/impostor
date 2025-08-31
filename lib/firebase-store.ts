@@ -34,6 +34,7 @@ export type Room = {
   game?: GameState;
   createdAt: number;
   lastActivity: number; // Track last activity for cleanup
+  showHints: boolean; // whether to show hints for impostors
 };
 
 class FirebaseStore {
@@ -46,7 +47,7 @@ class FirebaseStore {
     return id;
   }
 
-  async createRoom(ownerName: string, avatar?: string, avatarFull?: string) {
+  async createRoom(ownerName: string, avatar?: string, avatarFull?: string, showHints: boolean = true) {
     let roomId: string;
     let roomExists = true;
     
@@ -71,6 +72,7 @@ class FirebaseStore {
       players: [owner],
       createdAt: Date.now(),
       lastActivity: Date.now(),
+      showHints,
     };
 
     await firebaseHelpers.setRoom(roomId, room);
@@ -213,13 +215,17 @@ class FirebaseStore {
     if (!me) throw new Error("Player not in room");
 
     const game = room.game;
-    if (!game) return { role: null, word: null };
+    if (!game) return { role: null, word: null, isActive: false };
+
+    // Check if the game is still active (not ended)
+    const isActive = !game.endedAt;
 
     const role = game.impostorId === playerId ? "impostor" : "civilian";
     const word = role === "impostor" ? "IMPOSTOR" : game.word;
-    const hint = role === "impostor" ? game.hint : null;
+    // Only show hint if hints are enabled for this room
+    const hint = role === "impostor" && room.showHints ? game.hint : null;
 
-    return { role, word, hint };
+    return { role, word, hint, isActive };
   }
 
   async leaveRoom(roomId: string, playerId: string) {
@@ -252,6 +258,22 @@ class FirebaseStore {
     await firebaseHelpers.updateRoom(roomId, {
       lastActivity: Date.now()
     });
+  }
+
+  async toggleHints(roomId: string) {
+    const roomData = await firebaseHelpers.getRoom(roomId);
+    if (!roomData) throw new Error("Room not found");
+
+    const room = roomData as Room;
+    room.showHints = !room.showHints;
+    room.lastActivity = Date.now();
+
+    await firebaseHelpers.updateRoom(roomId, {
+      showHints: room.showHints,
+      lastActivity: room.lastActivity
+    });
+
+    return room.showHints;
   }
 
   // Cleanup function to remove old/inactive rooms

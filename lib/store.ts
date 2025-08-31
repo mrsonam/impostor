@@ -28,12 +28,13 @@ export type Room = {
   players: Player[];
   game?: GameState;
   createdAt: number;
+  showHints: boolean; // whether to show hints for impostors
 };
 
 class Memory {
   rooms = new Map<string, Room>();
 
-  createRoom(ownerName: string, avatar?: string, avatarFull?: string) {
+  createRoom(ownerName: string, avatar?: string, avatarFull?: string, showHints: boolean = true) {
     const id = this.code();
     const owner: Player = {
       id: nanoid(10),
@@ -48,6 +49,7 @@ class Memory {
       ownerId: owner.id,
       players: [owner],
       createdAt: Date.now(),
+      showHints,
     };
     this.rooms.set(id, room);
     return { room, player: owner };
@@ -121,7 +123,28 @@ class Memory {
       impostorId: string;
     }
   ) {
+    // Clear any existing game state before starting a new one
+    const room = this.rooms.get(roomId);
+    if (room) {
+      room.game = undefined;
+    }
     return this.startGame(roomId, picker);
+  }
+
+  clearGame(roomId: string) {
+    const room = this.rooms.get(roomId);
+    if (room) {
+      room.game = undefined;
+    }
+  }
+
+  toggleHints(roomId: string) {
+    const room = this.rooms.get(roomId);
+    if (room) {
+      room.showHints = !room.showHints;
+      return room.showHints;
+    }
+    return false;
   }
 
   getRoom(roomId: string) {
@@ -135,11 +158,16 @@ class Memory {
     const me = room.players.find((p) => p.id === playerId);
     if (!me) throw new Error("Player not in room");
     const game = room.game;
-    if (!game) return { role: null, word: null };
+    if (!game) return { role: null, word: null, isActive: false };
+    
+    // Check if the game is still active (not ended)
+    const isActive = !game.endedAt;
+    
     const role = game.impostorId === playerId ? "impostor" : "civilian";
     const word = role === "impostor" ? "IMPOSTOR" : game.word;
-    const hint = role === "impostor" ? game.hint : null;
-    return { role, word, hint };
+    // Only show hint if hints are enabled for this room
+    const hint = role === "impostor" && room.showHints ? game.hint : null;
+    return { role, word, hint, isActive };
   }
 
   private code(): string {

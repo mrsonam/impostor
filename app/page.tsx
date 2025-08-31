@@ -59,6 +59,7 @@ export default function Home() {
   const [tab, setTab] = useState<"join" | "create">("join");
   const [avatar, setAvatar] = useState(AVATARS[0].src);
   const [avatarFull, setAvatarFull] = useState(AVATARS[0].full);
+  const [showHints, setShowHints] = useState(true);
 
   // For solid color bg for first 2 seconds
   const [showSolidBg, setShowSolidBg] = useState(true);
@@ -74,7 +75,7 @@ export default function Home() {
     setBusy(true);
     const res = await fetch("/api/room/create", {
       method: "POST",
-      body: JSON.stringify({ name, avatar, avatarFull }),
+      body: JSON.stringify({ name, avatar, avatarFull, showHints }),
     });
     const data = await res.json();
     setBusy(false);
@@ -279,6 +280,31 @@ export default function Home() {
                     autoComplete="off"
                     maxLength={16}
                   />
+                </div>
+                <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/20 mb-4">
+                  <div className="flex flex-col">
+                    <span className="text-white text-sm font-medium">
+                      Show hints for impostors
+                    </span>
+                    <span className="text-white/60 text-xs">
+                      (Helps impostors blend in)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowHints(!showHints)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      showHints ? "bg-blue-500" : "bg-gray-400"
+                    }`}
+                    style={{ flexShrink: 0 }}
+                    aria-label="Toggle hints for impostors"
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        showHints ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
                 </div>
                 <button
                   className="w-full py-2 rounded bg-gradient-to-r from-violet-500/80 to-blue-400/80 text-white font-bold text-lg tracking-wide shadow-md hover:from-violet-400/90 hover:to-blue-300/90 transition-all disabled:opacity-40 mt-2"

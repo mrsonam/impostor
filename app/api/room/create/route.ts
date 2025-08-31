@@ -4,11 +4,11 @@ import { pusherServer } from "@/lib/pusher";
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, avatar, avatarFull } = await req.json();
+    const { name, avatar, avatarFull, showHints = true } = await req.json();
     if (!name)
       return NextResponse.json({ error: "Missing name" }, { status: 400 });
     
-    const { room, player } = await firebaseStore.createRoom(name, avatar, avatarFull);
+    const { room, player } = await firebaseStore.createRoom(name, avatar, avatarFull, showHints);
     
     await pusherServer.trigger(`room-${room.id}`, "player-joined", {
       players: room.players,
