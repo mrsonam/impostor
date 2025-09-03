@@ -8,15 +8,55 @@ import playersIcon from "@/app/assets/images/players.png";
 import create from "@/app/assets/images/create.png";
 import leave from "@/app/assets/images/leave.png";
 import detective from "@/app/assets/images/detective.png";
+import kick from "@/app/assets/images/kick.png";
 import { CloseButtonProps, ToastContainer, toast } from "react-toastify";
-import { showErrorToast } from "@/lib/toast-utils";
+import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { useConfirmationModal } from "@/lib/useConfirmationModal";
 import ConfirmationModal from "@/components/ConfirmationModal";
+
+// Loader component
+function Loader({
+  size = "md",
+  className = "",
+}: {
+  size?: "sm" | "md" | "lg";
+  className?: string;
+}) {
+  const sizeClasses = {
+    sm: "h-4 w-4",
+    md: "h-6 w-6",
+    lg: "h-8 w-8",
+  };
+
+  return (
+    <svg
+      className={`animate-spin ${sizeClasses[size]} text-yellow-300 ${className}`}
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      aria-label="Loading"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+      ></circle>
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+      ></path>
+    </svg>
+  );
+}
 
 // Custom hook for safely accessing sessionStorage
 function useSessionStorage(key: string, defaultValue: string = "") {
   const [value, setValue] = useState(defaultValue);
-  
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const stored = sessionStorage.getItem(key);
@@ -25,21 +65,24 @@ function useSessionStorage(key: string, defaultValue: string = "") {
       }
     }
   }, [key]);
-  
-  const updateValue = useCallback((newValue: string) => {
-    setValue(newValue);
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem(key, newValue);
-    }
-  }, [key]);
-  
+
+  const updateValue = useCallback(
+    (newValue: string) => {
+      setValue(newValue);
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(key, newValue);
+      }
+    },
+    [key]
+  );
+
   const removeValue = useCallback(() => {
     setValue(defaultValue);
     if (typeof window !== "undefined") {
       sessionStorage.removeItem(key);
     }
   }, [key, defaultValue]);
-  
+
   return [value, updateValue, removeValue] as const;
 }
 
@@ -71,7 +114,10 @@ function useChannel(roomId: string, on: (type: string, payload: any) => void) {
 
 export default function RoomPage() {
   const { id: roomId } = useParams<{ id: string }>();
-  const [playerId, setPlayerId, removePlayerId] = useSessionStorage("playerId", "");
+  const [playerId, setPlayerId, removePlayerId] = useSessionStorage(
+    "playerId",
+    ""
+  );
   const [players, setPlayers] = useState<any[]>([]);
   const [phase, setPhase] = useState<"lobby" | "round" | "end">("lobby");
   const [myRole, setMyRole] = useState<null | "impostor" | "civilian">(null);
@@ -79,6 +125,12 @@ export default function RoomPage() {
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [myHint, setMyHint] = useState<string | null>(null);
   const [showHints, setShowHints] = useState(true);
+  const [isLoadingGameData, setIsLoadingGameData] = useState(false);
+  const [isStartingGame, setIsStartingGame] = useState(false);
+  const [isEndingGame, setIsEndingGame] = useState(false);
+  const [isStartingNewGame, setIsStartingNewGame] = useState(false);
+  const [isTogglingHints, setIsTogglingHints] = useState(false);
+  const [isLoadingRoom, setIsLoadingRoom] = useState(false);
 
   // Confirmation modal
   const { isOpen, openModal, closeModal, modalConfig, handleConfirm } =
@@ -205,11 +257,11 @@ export default function RoomPage() {
       if (payload.newOwnerId) {
         setOwnerId(payload.newOwnerId);
       }
-                     // If the current player left, redirect to home
-        if (payload.playerId === playerId) {
-          removePlayerId();
-          window.location.href = "/";
-        }
+      // If the current player left, redirect to home
+      if (payload.playerId === playerId) {
+        removePlayerId();
+        window.location.href = "/";
+      }
     }
     if (type === "room-loaded") {
       setPlayers(payload.players);
@@ -227,20 +279,41 @@ export default function RoomPage() {
       }
       setPhase("round");
       setShowOverlay(true); // Show overlay on game start
+
+      // Set loading state and fetch game data
+      setIsLoadingGameData(true);
       fetch(`/api/game/private-view?roomId=${roomId}&playerId=${playerId}`)
         .then((r) => r.json())
         .then((d) => {
           setMyRole(d.role);
           setMyWord(d.word);
           setMyHint(d.hint ?? null);
-
-          // Game just started, so it's definitely active
-          setPhase("round");
-          setShowOverlay(true);
+          setIsLoadingGameData(false);
         })
         .catch((error) => {
           console.error("Error fetching game private view:", error);
-          showErrorToast("Failed to load game role. Please refresh the page.");
+          setIsLoadingGameData(false);
+          // Silently retry after a short delay
+          setTimeout(() => {
+            setIsLoadingGameData(true);
+            fetch(
+              `/api/game/private-view?roomId=${roomId}&playerId=${playerId}`
+            )
+              .then((r) => r.json())
+              .then((d) => {
+                setMyRole(d.role);
+                setMyWord(d.word);
+                setMyHint(d.hint ?? null);
+                setIsLoadingGameData(false);
+              })
+              .catch((retryError) => {
+                console.error("Retry failed:", retryError);
+                setIsLoadingGameData(false);
+                showErrorToast(
+                  "Failed to load game role. Please refresh the page."
+                );
+              });
+          }, 1000);
         });
     }
     if (type === "game-ended") {
@@ -256,7 +329,7 @@ export default function RoomPage() {
           toastId: "hints-toggled",
         }
       );
-      
+
       // If hints were enabled and there's an active game, refresh the private view to get the hint
       if (payload.showHints && phase === "round" && myRole === "impostor") {
         fetch(`/api/game/private-view?roomId=${roomId}&playerId=${playerId}`)
@@ -267,39 +340,48 @@ export default function RoomPage() {
             }
           })
           .catch((error) => {
-            console.error("Error refreshing private view after hint toggle:", error);
+            console.error(
+              "Error refreshing private view after hint toggle:",
+              error
+            );
           });
       }
     }
   });
 
   useEffect(() => {
-    fetch(`/api/game/private-view?roomId=${roomId}&playerId=${playerId}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.role && d.isActive) {
-          setMyRole(d.role);
-          setMyWord(d.word);
-          setMyHint(d.hint ?? null);
+    if (playerId) {
+      setIsLoadingGameData(true);
+      fetch(`/api/game/private-view?roomId=${roomId}&playerId=${playerId}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.role && d.isActive) {
+            setMyRole(d.role);
+            setMyWord(d.word);
+            setMyHint(d.hint ?? null);
 
-          // Only set phase to round and show overlay if the game is actually active
-          setPhase("round");
-          setShowOverlay(true);
-        } else {
-          // Clear any old game state if the game is not active
-          setMyRole(null);
-          setMyWord(null);
-          setMyHint(null);
-        }
-      })
-      .catch((error) => {
-        console.error("Error fetching private view:", error);
-        showErrorToast("Failed to load game state. Please refresh the page.");
-      });
+            // Only set phase to round and show overlay if the game is actually active
+            setPhase("round");
+            setShowOverlay(true);
+          } else {
+            // Clear any old game state if the game is not active
+            setMyRole(null);
+            setMyWord(null);
+            setMyHint(null);
+          }
+          setIsLoadingGameData(false);
+        })
+        .catch((error) => {
+          console.error("Error fetching private view:", error);
+          setIsLoadingGameData(false);
+          showErrorToast("Failed to load game state. Please refresh the page.");
+        });
+    }
   }, [roomId, playerId]);
 
   // On initial mount, fetch room info to get ownerId and sync state
   useEffect(() => {
+    setIsLoadingRoom(true);
     fetch(`/api/room/state?roomId=${roomId}`)
       .then((r) => r.json())
       .then((data) => {
@@ -315,9 +397,11 @@ export default function RoomPage() {
         if (data.showHints !== undefined) {
           setShowHints(data.showHints);
         }
+        setIsLoadingRoom(false);
       })
       .catch((error) => {
         console.error("Error loading room state:", error);
+        setIsLoadingRoom(false);
         showErrorToast(
           "Failed to load room information. Please refresh the page."
         );
@@ -335,12 +419,39 @@ export default function RoomPage() {
           }
         })
         .catch((error) => {
-          console.error("Error refreshing private view after hint change:", error);
+          console.error(
+            "Error refreshing private view after hint change:",
+            error
+          );
         });
     }
   }, [showHints, phase, myRole, roomId, playerId]);
 
+  // Silent background retry for missing game data
+  useEffect(() => {
+    if (phase === "round" && (!myRole || !myWord)) {
+      const timer = setTimeout(() => {
+        // Silently retry loading game data
+        fetch(`/api/game/private-view?roomId=${roomId}&playerId=${playerId}`)
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.role && d.isActive) {
+              setMyRole(d.role);
+              setMyWord(d.word);
+              setMyHint(d.hint ?? null);
+            }
+          })
+          .catch((error) => {
+            console.error("Background retry failed:", error);
+          });
+      }, 2000); // Wait 2 seconds before retrying
+
+      return () => clearTimeout(timer);
+    }
+  }, [phase, myRole, myWord, roomId, playerId]);
+
   async function startGame() {
+    setIsStartingGame(true);
     try {
       const res = await fetch("/api/game/start", {
         method: "POST",
@@ -355,10 +466,13 @@ export default function RoomPage() {
     } catch (error) {
       console.error("Error starting game:", error);
       showErrorToast("Failed to start game. Please try again.");
+    } finally {
+      setIsStartingGame(false);
     }
   }
 
   async function endRound() {
+    setIsEndingGame(true);
     try {
       const res = await fetch("/api/game/end", {
         method: "POST",
@@ -373,10 +487,13 @@ export default function RoomPage() {
     } catch (error) {
       console.error("Error ending game:", error);
       showErrorToast("Failed to end game. Please try again.");
+    } finally {
+      setIsEndingGame(false);
     }
   }
 
   async function newGame() {
+    setIsStartingNewGame(true);
     try {
       const res = await fetch("/api/game/new", {
         method: "POST",
@@ -389,10 +506,13 @@ export default function RoomPage() {
     } catch (error) {
       console.error("Error starting new game:", error);
       showErrorToast("Failed to start new game. Please try again.");
+    } finally {
+      setIsStartingNewGame(false);
     }
   }
 
   async function toggleHints() {
+    setIsTogglingHints(true);
     try {
       const res = await fetch("/api/room/toggle-hints", {
         method: "POST",
@@ -405,6 +525,43 @@ export default function RoomPage() {
     } catch (error) {
       console.error("Error toggling hints:", error);
       showErrorToast("Failed to toggle hints. Please try again.");
+    } finally {
+      setIsTogglingHints(false);
+    }
+  }
+
+  async function kickPlayer(playerIdToKick: string, playerName: string) {
+    const confirmed = await openModal({
+      title: "Kick Player",
+      message: `Are you sure you want to kick ${playerName} from the room? This action cannot be undone.`,
+      confirmText: "Kick Player",
+      cancelText: "Cancel",
+      type: "warning",
+    });
+
+    if (confirmed) {
+      try {
+        const res = await fetch("/api/room/kick", {
+          method: "POST",
+          body: JSON.stringify({
+            roomId,
+            kickerId: playerId,
+            targetPlayerId: playerIdToKick,
+          }),
+        });
+        const data = await res.json();
+
+        if (data.ok) {
+          showSuccessToast(`${playerName} has been kicked from the room`);
+        } else {
+          showErrorToast(
+            "Failed to kick player: " + (data.error || "Unknown error")
+          );
+        }
+      } catch (error) {
+        console.error("Error kicking player:", error);
+        showErrorToast("Failed to kick player. Please try again.");
+      }
     }
   }
 
@@ -441,21 +598,24 @@ export default function RoomPage() {
   }, [players, playerId]);
 
   const playerAvatarSrcs = useMemo(() => {
-    return players.map(p => ({
+    return players.map((p) => ({
       id: p.id,
-      src: p.avatar || playerIcon.src
+      src: p.avatar || playerIcon.src,
     }));
   }, [players]);
 
   // Memoize static image sources to prevent unnecessary re-renders
-  const staticImages = useMemo(() => ({
-    key: key.src,
-    leave: leave.src,
-    playersIcon: playersIcon.src,
-    create: create.src,
-    player: playerIcon.src,
-    detective: detective.src
-  }), []);
+  const staticImages = useMemo(
+    () => ({
+      key: key.src,
+      leave: leave.src,
+      playersIcon: playersIcon.src,
+      create: create.src,
+      player: playerIcon.src,
+      detective: detective.src,
+    }),
+    []
+  );
 
   return (
     <main className="grid gap-4">
@@ -526,23 +686,23 @@ export default function RoomPage() {
               </span>
             </div>
           )}
-                     <Image
-             src={myAvatarSrc}
-             alt="Swipe up"
-             fill
-             style={{
-               objectFit: "cover",
-               position: "absolute",
-               left: 0,
-               top: 0,
-               zIndex: 1,
-               pointerEvents: "none",
-               userSelect: "none",
-             }}
-             priority
-             sizes="100vw"
-             draggable={false}
-           />
+          <Image
+            src={myAvatarSrc}
+            alt="Swipe up"
+            fill
+            style={{
+              objectFit: "cover",
+              position: "absolute",
+              left: 0,
+              top: 0,
+              zIndex: 1,
+              pointerEvents: "none",
+              userSelect: "none",
+            }}
+            priority
+            sizes="100vw"
+            draggable={false}
+          />
           {/* End Round button on top of overlay image */}
           {showOverlayEndRoundButton && (
             <div
@@ -558,16 +718,24 @@ export default function RoomPage() {
               }}
             >
               <button
-                className="px-6 py-2 rounded bg-red-600 text-white font-bold shadow-lg text-base"
+                className="px-6 py-2 rounded bg-red-600 text-white font-bold shadow-lg text-base disabled:opacity-50"
                 style={{
                   pointerEvents: "auto",
                   fontSize: "1.1rem",
                   boxShadow: "0 2px 12px rgba(0,0,0,0.18)",
                 }}
                 onClick={endRound}
+                disabled={isEndingGame}
                 type="button"
               >
-                End Round
+                {isEndingGame ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader size="sm" />
+                    <span>Ending...</span>
+                  </div>
+                ) : (
+                  "End Round"
+                )}
               </button>
             </div>
           )}
@@ -619,26 +787,26 @@ export default function RoomPage() {
       {/* Room info card */}
       <div className={card}>
         <div className="flex items-center justify-between mb-2">
-                     <span className={chip}>
-             <Image
-               src={staticImages.key}
-               alt="Room"
-               className="inline w-5 h-5 mr-1"
-               width={20}
-               height={20}
-             />
-             <span className="tracking-widest font-mono text-base text-white">
-               {roomId}
-             </span>
-           </span>
-           <span className={chip}>
-             <Image
-               src={staticImages.leave}
-               alt="Leave"
-               className="inline w-5 h-5 mr-1"
-               width={20}
-               height={20}
-             />
+          <span className={chip}>
+            <Image
+              src={staticImages.key}
+              alt="Room"
+              className="inline w-5 h-5 mr-1"
+              width={20}
+              height={20}
+            />
+            <span className="tracking-widest font-mono text-base text-white">
+              {roomId}
+            </span>
+          </span>
+          <span className={chip}>
+            <Image
+              src={staticImages.leave}
+              alt="Leave"
+              className="inline w-5 h-5 mr-1"
+              width={20}
+              height={20}
+            />
             <button
               type="button"
               className="flex items-center gap-1 px-[1px] py-1 transition-colors cursor-pointer"
@@ -661,11 +829,11 @@ export default function RoomPage() {
                       body: JSON.stringify({ roomId, playerId }),
                     });
                     const data = await res.json();
-                                                                 if (data.ok) {
-                         // Clear session storage and redirect
-                         removePlayerId();
-                         window.location.href = "/";
-                       } else {
+                    if (data.ok) {
+                      // Clear session storage and redirect
+                      removePlayerId();
+                      window.location.href = "/";
+                    } else {
                       toast.error(
                         "Failed to leave room: " +
                           (data.error || "Unknown error")
@@ -706,9 +874,10 @@ export default function RoomPage() {
                   setShowHints((prev: boolean) => !prev);
                 }
               }}
+              disabled={isTogglingHints}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                 showHints ? "bg-blue-500" : "bg-gray-400"
-              }`}
+              } ${isTogglingHints ? "opacity-50 cursor-not-allowed" : ""}`}
               style={{ flexShrink: 0 }}
               aria-label="Toggle hints for impostors"
             >
@@ -723,38 +892,62 @@ export default function RoomPage() {
         {/* Hide player list when game is ongoing (phase === "round") */}
         {phase !== "round" && (
           <div>
-                         <h3 className="text-white text-lg font-bold mb-2 flex items-center gap-2">
-               <Image
-                 src={staticImages.playersIcon}
-                 alt="Players"
-                 className="inline w-6 h-6"
-                 width={24}
-                 height={24}
-               />
-               Players
-             </h3>
+            <h3 className="text-white text-lg font-bold mb-2 flex items-center gap-2">
+              <Image
+                src={staticImages.playersIcon}
+                alt="Players"
+                className="inline w-6 h-6"
+                width={24}
+                height={24}
+              />
+              Players
+              {isLoadingRoom && (
+                <div className="flex items-center gap-2">
+                  <Loader size="sm" />
+                  <span className="text-white/60 text-sm">Loading...</span>
+                </div>
+              )}
+            </h3>
             <ul className="grid gap-2">
-                             {players.map((p: any, idx: number) => (
-                 <li
-                   key={`${p.id}-${p.avatar}-${p.impostorCount}`}
-                   className="flex items-center justify-between rounded-xl bg-white/10 border border-white/40 px-3 py-2"
-                 >
-                                     <span className="text-white font-semibold flex items-center gap-2">
-                     <Image
-                                               src={playerAvatarSrcs.find(avatar => avatar.id === p.id)?.src || playerIcon.src}
-                       alt={p.name}
-                       className="inline w-5 h-5 rounded-full"
-                       width={20}
-                       height={20}
-                     />
-                     {p.name}
-                     {idx === 0 && (
-                       <span className="ml-2 px-2 py-0.5 rounded bg-yellow-400/30 text-yellow-200 text-xs font-bold">
-                         Creator
-                       </span>
-                     )}
-                   </span>
+              {players.map((p: any, idx: number) => (
+                <li
+                  key={`${p.id}-${p.avatar}-${p.impostorCount}`}
+                  className="flex items-center justify-between rounded-xl bg-white/10 border border-white/40 px-3 py-2"
+                >
+                  <span className="text-white font-semibold flex items-center gap-2">
+                    <Image
+                      src={
+                        playerAvatarSrcs.find((avatar) => avatar.id === p.id)
+                          ?.src || playerIcon.src
+                      }
+                      alt={p.name}
+                      className="inline w-5 h-5 rounded-full"
+                      width={20}
+                      height={20}
+                    />
+                    {p.name}
+                    {idx === 0 && (
+                      <span className="ml-2 px-2 py-0.5 rounded bg-yellow-400/30 text-yellow-200 text-xs font-bold">
+                        Creator
+                      </span>
+                    )}
+                  </span>
+
                   <span className="text-white/70 text-xs font-mono">
+                    {isOwner && p.id !== playerId && (
+                      <button
+                        onClick={() => kickPlayer(p.id, p.name)}
+                        className="mr-10 px-2 py-1 text-xs text-white rounded transition-colors "
+                        title={`Kick ${p.name} from the room`}
+                        type="button"
+                      >
+                        <img
+                          src={kick.src}
+                          alt={"Detective"}
+                          className="inline w-5 h-5 rounded-full"
+                        />{" "}
+                      </button>
+                    )}
                     {p.id === playerId ? (
                       <>
                         <span className="font-bold text-yellow-300 mr-2">
@@ -780,6 +973,7 @@ export default function RoomPage() {
                       </span>
                     )}
                   </span>
+                  {/* Kick button for room owner (not visible for the owner themselves) */}
                 </li>
               ))}
             </ul>
@@ -790,18 +984,25 @@ export default function RoomPage() {
       {/* Lobby phase */}
       {phase === "lobby" && (
         <div className={card + " bg-teal-100/10"}>
-                     <div className="flex items-center gap-2 mb-2">
-             <Image
-               src={staticImages.create}
-               alt="Start"
-               className="inline w-6 h-6"
-               width={24}
-               height={24}
-             />
-             <span className="text-white text-base font-semibold">
-               Waiting for players...
-             </span>
-           </div>
+          <div className="flex items-center gap-2 mb-2">
+            <Image
+              src={staticImages.create}
+              alt="Start"
+              className="inline w-6 h-6"
+              width={24}
+              height={24}
+            />
+            <span className="text-white text-base font-semibold">
+              {isLoadingRoom ? (
+                <div className="flex items-center gap-2">
+                  <Loader size="sm" />
+                  <span>Loading room...</span>
+                </div>
+              ) : (
+                "Waiting for players..."
+              )}
+            </span>
+          </div>
           <p className="text-white/80 text-sm mb-2">
             At least <span className="font-bold text-white">3 players</span>{" "}
             required. Voting is done in person.
@@ -810,13 +1011,20 @@ export default function RoomPage() {
             <button
               className={btnStart}
               onClick={startGame}
-              disabled={players.length < 3}
+              disabled={players.length < 3 || isStartingGame}
               type="button"
               title={
                 players.length < 3 ? "At least 3 players required" : undefined
               }
             >
-              Start Game
+              {isStartingGame ? (
+                <div className="flex items-center justify-center gap-2">
+                  <Loader size="sm" />
+                  <span>Starting...</span>
+                </div>
+              ) : (
+                "Start Game"
+              )}
             </button>
           )}
         </div>
@@ -851,7 +1059,15 @@ export default function RoomPage() {
                 : showHints
                 ? "No hint available"
                 : "Hints disabled"
-              : myWord}
+              : myWord ||
+                (isLoadingGameData ? (
+                  <div className="flex items-center justify-center gap-3">
+                    <Loader size="lg" />
+                    <span className="text-2xl">Loading word...</span>
+                  </div>
+                ) : (
+                  "Word not loaded"
+                ))}
           </div>
           {/* Remove End Round button from here, now on overlay */}
         </div>
@@ -867,14 +1083,32 @@ export default function RoomPage() {
             <p className="text-white/80 text-sm mb-2">
               Start a new game to rotate the impostor and word.
             </p>
-            <button className={btnNew} onClick={newGame} type="button">
-              New Game
+            <button
+              className={btnNew}
+              onClick={newGame}
+              disabled={isStartingNewGame}
+              type="button"
+            >
+              {isStartingNewGame ? (
+                <div className="flex items-center justify-center gap-2">
+                  <Loader size="sm" />
+                  <span>Starting...</span>
+                </div>
+              ) : (
+                "New Game"
+              )}
             </button>
           </div>
         ) : (
           <div className={card + " bg-teal-100/10"}>
             <div className="flex items-center gap-2 mb-2">
-              <Image src={staticImages.create} alt="Start" className="inline w-6 h-6" width={24} height={24} />
+              <Image
+                src={staticImages.create}
+                alt="Start"
+                className="inline w-6 h-6"
+                width={24}
+                height={24}
+              />
               <span className="text-white text-base font-semibold">
                 Waiting for players...
               </span>

@@ -35,6 +35,7 @@ export type Room = {
   createdAt: number;
   lastActivity: number; // Track last activity for cleanup
   showHints: boolean; // whether to show hints for impostors
+  usedWords: string[]; // Track words already used in this room to avoid repetition
 };
 
 class FirebaseStore {
@@ -73,6 +74,7 @@ class FirebaseStore {
       createdAt: Date.now(),
       lastActivity: Date.now(),
       showHints,
+      usedWords: [], // Initialize empty array for new rooms
     };
 
     await firebaseHelpers.setRoom(roomId, room);
@@ -137,11 +139,15 @@ class FirebaseStore {
 
     room.game = game;
     room.lastActivity = Date.now();
+    
+    // Add the word to used words list to avoid repetition
+    room.usedWords.push(word);
 
     await firebaseHelpers.updateRoom(roomId, {
       game: room.game,
       players: room.players,
-      lastActivity: room.lastActivity
+      lastActivity: room.lastActivity,
+      usedWords: room.usedWords
     });
 
     return game;
@@ -250,6 +256,47 @@ class FirebaseStore {
     }
   }
 
+  async kickPlayer(roomId: string, kickerId: string, targetPlayerId: string) {
+    const roomData = await firebaseHelpers.getRoom(roomId);
+    if (!roomData) throw new Error("Room not found");
+
+    const room = roomData as Room;
+    
+    // Check if the kicker is the room owner
+    if (room.ownerId !== kickerId) {
+      throw new Error("Only room owner can kick players");
+    }
+    
+    // Check if trying to kick the owner
+    if (targetPlayerId === room.ownerId) {
+      throw new Error("Cannot kick the room owner");
+    }
+    
+    // Check if target player exists in the room
+    const targetPlayer = room.players.find(p => p.id === targetPlayerId);
+    if (!targetPlayer) {
+      throw new Error("Player not found in room");
+    }
+    
+    // Remove the player from the room
+    room.players = room.players.filter(p => p.id !== targetPlayerId);
+    room.lastActivity = Date.now();
+    
+    // If there's an active game and the kicked player was the impostor, end the game
+    if (room.game && !room.game.endedAt && room.game.impostorId === targetPlayerId) {
+      room.game.endedAt = Date.now();
+    }
+    
+    // Update the room
+    await firebaseHelpers.updateRoom(roomId, {
+      players: room.players,
+      game: room.game,
+      lastActivity: room.lastActivity
+    });
+    
+    return { room, kickedPlayer: targetPlayer };
+  }
+
   async updateRoom(roomId: string, updates: any) {
     await firebaseHelpers.updateRoom(roomId, updates);
   }
@@ -274,6 +321,23 @@ class FirebaseStore {
     });
 
     return room.showHints;
+  }
+
+  async getWordPoolStats(roomId: string) {
+    const roomData = await firebaseHelpers.getRoom(roomId);
+    if (!roomData) return null;
+    
+    const room = roomData as Room;
+    const usedWords = room.usedWords || [];
+    const totalWords = 265; // Total words in the WORDS array
+    const availableWords = totalWords - usedWords.length;
+    
+    return {
+      totalWords,
+      usedWords: usedWords.length,
+      availableWords,
+      usedWordsList: usedWords
+    };
   }
 
   // Cleanup function to remove old/inactive rooms
