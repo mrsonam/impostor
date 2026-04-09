@@ -9,10 +9,13 @@ import create from "@/app/assets/images/create.png";
 import leave from "@/app/assets/images/leave.png";
 import detective from "@/app/assets/images/detective.png";
 import kick from "@/app/assets/images/kick.png";
-import { CloseButtonProps, ToastContainer, toast } from "react-toastify";
+import { toast } from "react-toastify";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { useConfirmationModal } from "@/lib/useConfirmationModal";
 import ConfirmationModal from "@/components/ConfirmationModal";
+import { motion, AnimatePresence } from "framer-motion";
+import { useIsMobile } from "@/lib/useIsMobile";
+import MobileOverlayCard from "@/components/MobileOverlayCard";
 
 // Loader component
 function Loader({
@@ -136,72 +139,10 @@ export default function RoomPage() {
   const { isOpen, openModal, closeModal, modalConfig, handleConfirm } =
     useConfirmationModal();
 
-  // Overlay state
-  const [showOverlay, setShowOverlay] = useState(false);
-  const [overlayY, setOverlayY] = useState(0);
-  const overlayRef = useRef<HTMLDivElement>(null);
-  const startYRef = useRef<number | null>(null);
-  const draggingRef = useRef(false);
 
   // Helper: is this player the room creator?
-  const isOwner = ownerId && playerId && ownerId === playerId;
+  const isOwner = Boolean(ownerId && playerId && ownerId === playerId);
 
-  // Overlay handlers
-  function clampOverlayY(y: number) {
-    // Only allow upward swipe (negative y), max -50% of window height, min 0 (no downward movement)
-    const maxUp = -window.innerHeight * 0.4;
-    return Math.max(maxUp, Math.min(0, y));
-  }
-
-  function handleOverlayTouchStart(e: React.TouchEvent) {
-    if (e.touches.length === 1) {
-      draggingRef.current = true;
-      startYRef.current = e.touches[0].clientY;
-    }
-  }
-  function handleOverlayTouchMove(e: React.TouchEvent) {
-    if (!draggingRef.current || startYRef.current === null) return;
-    const deltaY = e.touches[0].clientY - startYRef.current;
-    setOverlayY(clampOverlayY(deltaY));
-  }
-  function handleOverlayTouchEnd() {
-    draggingRef.current = false;
-    // Always reset to exactly 0, never allow positive overlayY
-    setOverlayY(0);
-  }
-  function handleOverlayMouseDown(e: React.MouseEvent) {
-    draggingRef.current = true;
-    startYRef.current = e.clientY;
-    window.addEventListener("mousemove", handleOverlayMouseMove);
-    window.addEventListener("mouseup", handleOverlayMouseUp);
-  }
-  function handleOverlayMouseMove(e: MouseEvent) {
-    if (!draggingRef.current || startYRef.current === null) return;
-    const deltaY = e.clientY - startYRef.current;
-    // Only allow upward swipe (negative deltaY), max -25% of window height, min 0 (no downward movement)
-    const maxUp = -window.innerHeight * 0.4;
-    const newY = Math.max(maxUp, Math.min(0, deltaY));
-    setOverlayY(newY);
-  }
-  function handleOverlayMouseUp() {
-    draggingRef.current = false;
-    // Always reset to exactly 0, never allow positive overlayY
-    setOverlayY(0);
-    window.removeEventListener("mousemove", handleOverlayMouseMove);
-    window.removeEventListener("mouseup", handleOverlayMouseUp);
-  }
-
-  // Prevent overlayY from ever being positive (below the bottom) even if set programmatically
-  useEffect(() => {
-    if (overlayY > 0) setOverlayY(0);
-  }, [overlayY]);
-
-  // When overlay is shown, reset to 0
-  useEffect(() => {
-    if (showOverlay) {
-      setOverlayY(0);
-    }
-  }, [showOverlay]);
 
   useChannel(roomId, (type, payload) => {
     console.log(type, payload);
@@ -221,7 +162,10 @@ export default function RoomPage() {
           latestPlayer.id !== payload.players[0]?.id // owner is always first in list
         ) {
           const toastId = latestPlayer.id;
-          toast(`${latestPlayer.name} joined the room`, { toastId });
+          toast(`${latestPlayer.name} joined the room`, {
+            toastId,
+            icon: false,
+          });
         }
       }
       setPlayers(payload.players);
@@ -235,8 +179,6 @@ export default function RoomPage() {
         .then((data) => {
           if (data.phase) {
             setPhase(data.phase);
-            // Only show overlay if there's an active game
-            setShowOverlay(data.phase === "round" && data.game?.hasActiveGame);
           }
           if (data.showHints !== undefined) {
             setShowHints(data.showHints);
@@ -251,6 +193,7 @@ export default function RoomPage() {
       if (payload.playerId !== playerId) {
         toast(`${payload.playerName || "A player"} left the room`, {
           toastId: payload.playerId,
+          icon: false,
         });
       }
       setPlayers(payload.players);
@@ -272,13 +215,13 @@ export default function RoomPage() {
     if (type === "game-started") {
       toast("The game has begun! Good luck finding the impostor!", {
         toastId: "start",
+        icon: false,
       });
       setPlayers(payload.players);
       if (payload.players && payload.players.length > 0) {
         setOwnerId(payload.players[0].id);
       }
       setPhase("round");
-      setShowOverlay(true); // Show overlay on game start
 
       // Set loading state and fetch game data
       setIsLoadingGameData(true);
@@ -317,9 +260,11 @@ export default function RoomPage() {
         });
     }
     if (type === "game-ended") {
-      toast("Game ended! Ready for the next round?", { toastId: "end" });
+      toast("Game ended! Ready for the next round?", {
+        toastId: "end",
+        icon: false,
+      });
       setPhase("end");
-      setShowOverlay(false); // Hide overlay on end round
     }
     if (type === "hints-toggled") {
       setShowHints(payload.showHints);
@@ -327,6 +272,7 @@ export default function RoomPage() {
         `Hints ${payload.showHints ? "enabled" : "disabled"} for impostors`,
         {
           toastId: "hints-toggled",
+          icon: false,
         }
       );
 
@@ -362,7 +308,6 @@ export default function RoomPage() {
 
             // Only set phase to round and show overlay if the game is actually active
             setPhase("round");
-            setShowOverlay(true);
           } else {
             // Clear any old game state if the game is not active
             setMyRole(null);
@@ -391,8 +336,6 @@ export default function RoomPage() {
         }
         if (data.phase) {
           setPhase(data.phase);
-          // Only show overlay if there's an active game
-          setShowOverlay(data.phase === "round" && data.game?.hasActiveGame);
         }
         if (data.showHints !== undefined) {
           setShowHints(data.showHints);
@@ -461,7 +404,6 @@ export default function RoomPage() {
       if (data.error) {
         showErrorToast("Failed to start game: " + data.error);
       } else {
-        setShowOverlay(true);
       }
     } catch (error) {
       console.error("Error starting game:", error);
@@ -482,7 +424,6 @@ export default function RoomPage() {
       if (data.error) {
         showErrorToast("Failed to end game: " + data.error);
       } else {
-        setShowOverlay(false); // Hide overlay on end round
       }
     } catch (error) {
       console.error("Error ending game:", error);
@@ -497,15 +438,33 @@ export default function RoomPage() {
     try {
       const res = await fetch("/api/game/new", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ roomId }),
       });
-      const data = await res.json();
-      if (data.error) {
-        showErrorToast("Failed to start new game: " + data.error);
+      const raw = await res.text();
+      let data: { ok?: boolean; error?: string; gameId?: string } = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        showErrorToast("Invalid response from server. Please try again.");
+        return;
+      }
+      if (!res.ok || data.error) {
+        showErrorToast(
+          data.error || `Could not start a new round (${res.status}).`
+        );
+        return;
       }
     } catch (error) {
       console.error("Error starting new game:", error);
-      showErrorToast("Failed to start new game. Please try again.");
+      const isNetwork =
+        error instanceof TypeError &&
+        String((error as Error).message).includes("fetch");
+      showErrorToast(
+        isNetwork
+          ? "Network error — check your connection and try again."
+          : "Failed to start new game. Please try again."
+      );
     } finally {
       setIsStartingNewGame(false);
     }
@@ -566,32 +525,22 @@ export default function RoomPage() {
   }
 
   // Styles to match the home page, but with white text
-  const card =
-    "rounded-lg border border-white/30 p-5 grid gap-4 bg-white/10 shadow-lg";
-  const chip =
-    "inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/20 px-3 py-1 text-sm text-white";
-  const btn =
-    "w-full py-2 rounded bg-gradient-to-r font-bold text-lg tracking-wide shadow-md transition-all disabled:opacity-40 mt-2 text-white";
-  const btnStart =
-    btn +
-    " from-sky-500/80 to-yellow-400/80 hover:from-sky-400/90 hover:to-yellow-300/90";
-  const btnEnd =
-    btn +
-    " from-yellow-500/80 to-pink-400/80 hover:from-yellow-400/90 hover:to-pink-300/90";
-  const btnNew =
-    btn +
-    " from-violet-500/80 to-blue-400/80 hover:from-violet-400/90 hover:to-blue-300/90";
+  const card = "glass p-6 rounded-[2.5rem] grid gap-5 relative overflow-hidden";
+  const chip = "inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-semibold tracking-wide text-white/80 shadow-sm transition-all hover:bg-white/10";
+  const btn = "w-full py-4 rounded-2xl font-heading font-extrabold text-lg tracking-widest shadow-xl transition-all disabled:opacity-40 disabled:scale-100 flex items-center justify-center gap-2";
+  const btnStart = btn + " bg-gradient-to-br from-orange-600 to-red-600 shadow-orange-900/20 hover:shadow-orange-600/30";
+  const btnEnd = btn + " bg-gradient-to-br from-red-600 to-pink-700 shadow-red-900/20 hover:shadow-red-600/30";
+  const btnNew = btn + " bg-gradient-to-br from-blue-600 to-indigo-700 shadow-blue-900/20 hover:shadow-blue-600/30";
 
-  // --- NEW: End Round button for overlay, only visible in round phase and owner ---
-  const showOverlayEndRoundButton = showOverlay && phase === "round" && isOwner;
-
-  // Get the current player's name in all caps for overlay
-  const myPlayer = players.find((p) => p.id === playerId);
-  const myPlayerNameCaps = myPlayer?.name
-    ? String(myPlayer.name).toUpperCase()
-    : "";
+  const isMobile = useIsMobile();
+  const [isRevealed, setIsRevealed] = useState(false);
 
   // Memoize image sources to prevent reloading on state changes
+  const myPlayerName = useMemo(() => {
+    const player = players.find((p) => p.id === playerId);
+    return player?.name || "Player";
+  }, [players, playerId]);
+
   const myAvatarSrc = useMemo(() => {
     const player = players.find((p) => p.id === playerId);
     return player?.avatarFull || player?.avatar || playerIcon.src;
@@ -618,556 +567,324 @@ export default function RoomPage() {
   );
 
   return (
-    <main className="grid gap-4">
-      {/* Overlay image for swipe up */}
-      {showOverlay && (
-        <div
-          ref={overlayRef}
-          style={{
-            position: "fixed",
-            left: 0,
-            top: 0,
-            width: "100vw",
-            height: "100vh",
-            zIndex: 1000,
-            background: "rgba(0,0,0,0.95)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            touchAction: "none",
-            transition: draggingRef.current
-              ? "none"
-              : "transform 0.3s cubic-bezier(.4,2,.6,1)",
-            // Prevent overlay from ever going below the bottom (no positive overlayY)
-            transform: `translateY(${Math.min(0, overlayY)}px)`,
-            userSelect: "none",
-            overflow: "hidden",
-          }}
-          onTouchStart={handleOverlayTouchStart}
-          onTouchMove={handleOverlayTouchMove}
-          onTouchEnd={handleOverlayTouchEnd}
-          onMouseDown={handleOverlayMouseDown}
-        >
-          {/* Player name in all caps at the top of the image */}
-          {myPlayerNameCaps && (
-            <div
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100vw",
-                zIndex: 11,
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "flex-start",
-                pointerEvents: "none",
-                paddingTop: "18px",
-              }}
-            >
-              <span
-                style={{
-                  color: "#fff",
-                  fontWeight: 900,
-                  fontSize: "2.1rem",
-                  letterSpacing: "0.12em",
-                  textShadow: "0 2px 16px rgba(0,0,0,0.45)",
-                  //   background: "rgba(0,0,0,0.18)",
-                  borderRadius: "12px",
-                  padding: "0.25em 1.2em",
-                  maxWidth: "90vw",
-                  overflow: "hidden",
-                  whiteSpace: "nowrap",
-                  textOverflow: "ellipsis",
-                  fontFamily: "inherit",
-                  userSelect: "none",
-                }}
-              >
-                {myPlayerNameCaps}
-              </span>
-            </div>
-          )}
-          <Image
-            src={myAvatarSrc}
-            alt="Swipe up"
-            fill
-            style={{
-              objectFit: "cover",
-              position: "absolute",
-              left: 0,
-              top: 0,
-              zIndex: 1,
-              pointerEvents: "none",
-              userSelect: "none",
-            }}
-            priority
-            sizes="100vw"
-            draggable={false}
-          />
-          {/* End Round button on top of overlay image */}
-          {showOverlayEndRoundButton && (
-            <div
-              style={{
-                position: "absolute",
-                bottom: 130,
-                left: 0,
-                width: "100vw",
-                display: "flex",
-                justifyContent: "center",
-                zIndex: 10,
-                pointerEvents: "auto",
-              }}
-            >
-              <button
-                className="px-6 py-2 rounded bg-red-600 text-white font-bold shadow-lg text-base disabled:opacity-50"
-                style={{
-                  pointerEvents: "auto",
-                  fontSize: "1.1rem",
-                  boxShadow: "0 2px 12px rgba(0,0,0,0.18)",
-                }}
-                onClick={endRound}
-                disabled={isEndingGame}
-                type="button"
-              >
-                {isEndingGame ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <Loader size="sm" />
-                    <span>Ending...</span>
-                  </div>
-                ) : (
-                  "End Round"
-                )}
-              </button>
-            </div>
-          )}
-          <div
-            style={{
-              position: "relative",
-              zIndex: 2,
-              width: "100vw",
-              height: "100vh",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "flex-end",
-              pointerEvents: "none",
-              paddingBottom: "100px",
-            }}
-          >
-            <div
-              style={{
-                width: 44,
-                height: 4,
-                background: "#e2e8f0",
-                borderRadius: 4,
-                margin: "0 auto",
-                pointerEvents: "auto",
-                cursor: "grab",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
-              }}
-            />
-            {/* <div
-              style={{
-                borderRadius: 18,
-                padding: "1rem 1.5rem",
-                maxWidth: 340,
-                width: "90vw",
-                textAlign: "center",
-                margin: "0 auto",
-                pointerEvents: "auto",
-              }}
-            >
-              <p style={{ color: "#fff", fontSize: 17, marginBottom: 1 }}>
-                Swipe up to peek, then release to return to original position.
-              </p>
-            </div> */}
+    <div className="relative min-h-full w-full max-w-7xl mx-auto px-6 py-6 md:py-12 flex flex-col gap-8">
+      {/* Dynamic Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-2">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <h1 className="font-heading font-black text-2xl tracking-tighter text-white">ROOM TERMINAL</h1>
           </div>
+          <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Sector: {roomId}</p>
         </div>
-      )}
 
-      {/* Room info card */}
-      <div className={card}>
-        <div className="flex items-center justify-between mb-2">
-          <span className={chip}>
-            <Image
-              src={staticImages.key}
-              alt="Room"
-              className="inline w-5 h-5 mr-1"
-              width={20}
-              height={20}
-            />
-            <span className="tracking-widest font-mono text-base text-white">
-              {roomId}
-            </span>
-          </span>
-          <span className={chip}>
-            <Image
-              src={staticImages.leave}
-              alt="Leave"
-              className="inline w-5 h-5 mr-1"
-              width={20}
-              height={20}
-            />
-            <button
-              type="button"
-              className="flex items-center gap-1 px-[1px] py-1 transition-colors cursor-pointer"
-              title="Leave room"
-              style={{ pointerEvents: "auto" }}
-              onClick={async () => {
-                const confirmed = await openModal({
-                  title: "Leave Room",
-                  message:
-                    "Are you sure you want to leave this room? You will need to rejoin if you want to play again.",
-                  confirmText: "Leave Room",
-                  cancelText: "Stay",
-                  type: "warning",
-                });
+        <div className="flex items-center gap-4">
+           {/* Room Code with copy functionality */}
+           <button 
+             onClick={() => {
+               navigator.clipboard.writeText(roomId);
+               toast.success("Room code copied!", { icon: false });
+             }}
+             className="flex items-center gap-4 rounded-2xl bg-white/5 border border-white/10 px-6 py-3 transition-all hover:bg-white/10 group active:scale-95 shadow-lg"
+           >
+              <Image src={staticImages.key} alt="Room" className="w-5 h-5 opacity-40 group-hover:opacity-100 transition-opacity" width={20} height={20} />
+              <span className="tracking-[0.25em] font-heading font-black text-xl text-white">
+                {roomId}
+              </span>
+           </button>
 
-                if (confirmed) {
-                  try {
-                    const res = await fetch("/api/room/leave", {
-                      method: "POST",
-                      body: JSON.stringify({ roomId, playerId }),
-                    });
-                    const data = await res.json();
-                    if (data.ok) {
-                      // Clear session storage and redirect
-                      removePlayerId();
-                      window.location.href = "/";
-                    } else {
-                      toast.error(
-                        "Failed to leave room: " +
-                          (data.error || "Unknown error")
-                      );
-                    }
-                  } catch (error) {
-                    console.error("Error leaving room:", error);
-                    toast.error("Failed to leave room. Please try again.");
-                  }
-                }
-              }}
-            >
-              <span className="font-semibold text-white">Leave</span>
-              {/* <span className="ml-1 text-xs text-white/60">(Leave)</span> */}
-            </button>
-          </span>
-        </div>
-        {/* Hint toggle for owner */}
-        {isOwner && (
-          <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/20 mb-4">
-            <div className="flex flex-col">
-              <span className="text-white text-sm font-medium">
-                Show hints for impostors
-              </span>
-              <span className="text-white/60 text-xs">
-                (Helps impostors blend in)
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={async () => {
-                // Optimistically update UI
-                setShowHints((prev: boolean) => !prev);
+           <button
+            type="button"
+            className="group flex items-center gap-3 rounded-2xl bg-white/5 border border-white/10 px-6 py-3 transition-all hover:bg-red-500/20 hover:border-red-500/40 hover:scale-105 active:scale-95 shadow-lg"
+            onClick={async () => {
+              const confirmed = await openModal({
+                title: "Leave Room",
+                message: "Are you sure you want to leave? Your progress in this room will be lost.",
+                confirmText: "Leave Room",
+                cancelText: "Stay",
+                type: "warning",
+              });
+
+              if (confirmed) {
                 try {
-                  await toggleHints();
-                } catch (e) {
-                  // Revert if failed
-                  setShowHints((prev: boolean) => !prev);
+                  const currentPlayerId = playerId || sessionStorage.getItem("playerId");
+                  const res = await fetch("/api/room/leave", {
+                    method: "POST",
+                    body: JSON.stringify({ roomId, playerId: currentPlayerId }),
+                  });
+                  const data = await res.json();
+                  if (data.ok) {
+                    removePlayerId();
+                    window.location.href = "/";
+                  }
+                } catch (error) {
+                  toast.error("Failed to leave room.", { icon: false });
                 }
-              }}
-              disabled={isTogglingHints}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                showHints ? "bg-blue-500" : "bg-gray-400"
-              } ${isTogglingHints ? "opacity-50 cursor-not-allowed" : ""}`}
-              style={{ flexShrink: 0 }}
-              aria-label="Toggle hints for impostors"
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  showHints ? "translate-x-6" : "translate-x-1"
-                }`}
-              />
-            </button>
-          </div>
-        )}
-        {/* Hide player list when game is ongoing (phase === "round") */}
-        {phase !== "round" && (
-          <div>
-            <h3 className="text-white text-lg font-bold mb-2 flex items-center gap-2">
-              <Image
-                src={staticImages.playersIcon}
-                alt="Players"
-                className="inline w-6 h-6"
-                width={24}
-                height={24}
-              />
-              Players
-              {isLoadingRoom && (
-                <div className="flex items-center gap-2">
-                  <Loader size="sm" />
-                  <span className="text-white/60 text-sm">Loading...</span>
-                </div>
-              )}
-            </h3>
-            <ul className="grid gap-2">
-              {players.map((p: any, idx: number) => (
-                <li
-                  key={`${p.id}-${p.avatar}-${p.impostorCount}`}
-                  className="flex items-center justify-between rounded-xl bg-white/10 border border-white/40 px-3 py-2"
-                >
-                  <span className="text-white font-semibold flex items-center gap-2">
-                    <Image
-                      src={
-                        playerAvatarSrcs.find((avatar) => avatar.id === p.id)
-                          ?.src || playerIcon.src
-                      }
-                      alt={p.name}
-                      className="inline w-5 h-5 rounded-full"
-                      width={20}
-                      height={20}
-                    />
-                    {p.name}
-                    {idx === 0 && (
-                      <span className="ml-2 px-2 py-0.5 rounded bg-yellow-400/30 text-yellow-200 text-xs font-bold">
-                        Creator
-                      </span>
-                    )}
-                  </span>
-
-                  <span className="text-white/70 text-xs font-mono">
-                    {isOwner && p.id !== playerId && (
-                      <button
-                        onClick={() => kickPlayer(p.id, p.name)}
-                        className="mr-10 px-2 py-1 text-xs text-white rounded transition-colors "
-                        title={`Kick ${p.name} from the room`}
-                        type="button"
-                      >
-                        <img
-                          src={kick.src}
-                          alt={"Detective"}
-                          className="inline w-5 h-5 rounded-full"
-                        />{" "}
-                      </button>
-                    )}
-                    {p.id === playerId ? (
-                      <>
-                        <span className="font-bold text-yellow-300 mr-2">
-                          You
-                        </span>
-                        <span className="text-orange-300 font-semibold">
-                          <img
-                            src={detective.src}
-                            alt={"Detective"}
-                            className="inline w-5 h-5 rounded-full"
-                          />{" "}
-                          {p.impostorCount || 0}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-orange-300 font-semibold">
-                        <img
-                          src={detective.src}
-                          alt={"Detective"}
-                          className="inline w-5 h-5 rounded-full"
-                        />{" "}
-                        {p.impostorCount || 0}
-                      </span>
-                    )}
-                  </span>
-                  {/* Kick button for room owner (not visible for the owner themselves) */}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-
-      {/* Lobby phase */}
-      {phase === "lobby" && (
-        <div className={card + " bg-teal-100/10"}>
-          <div className="flex items-center gap-2 mb-2">
-            <Image
-              src={staticImages.create}
-              alt="Start"
-              className="inline w-6 h-6"
-              width={24}
-              height={24}
-            />
-            <span className="text-white text-base font-semibold">
-              {isLoadingRoom ? (
-                <div className="flex items-center gap-2">
-                  <Loader size="sm" />
-                  <span>Loading room...</span>
-                </div>
-              ) : (
-                "Waiting for players..."
-              )}
-            </span>
-          </div>
-          <p className="text-white/80 text-sm mb-2">
-            At least <span className="font-bold text-white">3 players</span>{" "}
-            required. Voting is done in person.
-          </p>
-          {isOwner && (
-            <button
-              className={btnStart}
-              onClick={startGame}
-              disabled={players.length < 3 || isStartingGame}
-              type="button"
-              title={
-                players.length < 3 ? "At least 3 players required" : undefined
               }
-            >
-              {isStartingGame ? (
-                <div className="flex items-center justify-center gap-2">
-                  <Loader size="sm" />
-                  <span>Starting...</span>
-                </div>
-              ) : (
-                "Start Game"
-              )}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Round phase */}
-      {/* Place this at the bottom of the screen so it is visible when the overlay image is swiped up */}
-      {phase === "round" && (
-        <div
-          className="fixed bottom-0 left-0 w-full z-30 flex flex-col items-center justify-center py-8 bg-gradient-to-t from-black/80 via-black/40 to-transparent"
-          style={{
-            minHeight: "22vh",
-            pointerEvents: "none", // so overlay can be swiped
-          }}
-        >
-          <div className="mb-2 text-white/80 text-lg font-semibold uppercase tracking-widest">
-            {myRole === "impostor" ? "You are the Impostor" : "Your Word"}
-          </div>
-          <div
-            className={`${
-              myRole === "impostor" ? "text-red-400" : "text-[#FDF0D5]"
-            } font-extrabold text-3xl sm:text-5xl text-center drop-shadow-lg select-none`}
-            style={{
-              letterSpacing: "0.08em",
-              textShadow: "0 2px 12px rgba(0,0,0,0.25)",
-              pointerEvents: "auto",
             }}
           >
-            {myRole === "impostor"
-              ? showHints && myHint
-                ? `Hint: ${myHint}`
-                : showHints
-                ? "No hint available"
-                : "Hints disabled"
-              : myWord ||
-                (isLoadingGameData ? (
-                  <div className="flex items-center justify-center gap-3">
-                    <Loader size="lg" />
-                    <span className="text-2xl">Loading word...</span>
-                  </div>
-                ) : (
-                  "Word not loaded"
-                ))}
-          </div>
-          {/* Remove End Round button from here, now on overlay */}
+            <Image src={staticImages.leave} alt="Leave" className="w-5 h-5 opacity-70 group-hover:opacity-100 transition-opacity" width={20} height={20} />
+            <span className="font-heading font-bold text-sm text-white/80 group-hover:text-white">Exit</span>
+          </button>
         </div>
-      )}
-
-      {/* End phase */}
-      {phase === "end" &&
-        (isOwner ? (
-          <div className={card + " bg-sky-100/10 text-center"}>
-            <h2 className="text-xl font-extrabold text-white mb-2">
-              Round Over
-            </h2>
-            <p className="text-white/80 text-sm mb-2">
-              Start a new game to rotate the impostor and word.
-            </p>
-            <button
-              className={btnNew}
-              onClick={newGame}
-              disabled={isStartingNewGame}
-              type="button"
-            >
-              {isStartingNewGame ? (
-                <div className="flex items-center justify-center gap-2">
-                  <Loader size="sm" />
-                  <span>Starting...</span>
-                </div>
-              ) : (
-                "New Game"
-              )}
-            </button>
-          </div>
-        ) : (
-          <div className={card + " bg-teal-100/10"}>
-            <div className="flex items-center gap-2 mb-2">
-              <Image
-                src={staticImages.create}
-                alt="Start"
-                className="inline w-6 h-6"
-                width={24}
-                height={24}
-              />
-              <span className="text-white text-base font-semibold">
-                Waiting for players...
-              </span>
-            </div>
-            <p className="text-white/80 text-sm mb-2">
-              At least <span className="font-bold text-white">3 players</span>{" "}
-              required. Voting is done in person.
-            </p>
-          </div>
-        ))}
-
-      {/* Confirmation Modal */}
-      {modalConfig && (
-        <ConfirmationModal
-          isOpen={isOpen}
-          onClose={closeModal}
-          onConfirm={handleConfirm}
-          title={modalConfig.title}
-          message={modalConfig.message}
-          confirmText={modalConfig.confirmText}
-          cancelText={modalConfig.cancelText}
-          type={modalConfig.type}
-        />
-      )}
-
-      <div
-        style={{
-          position: "fixed",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          width: "100vw",
-          maxWidth: "100vw",
-          zIndex: 9999,
-          pointerEvents: "none",
-        }}
-      >
-        <ToastContainer
-          position="bottom-center"
-          autoClose={2000}
-          closeButton={({ closeToast }: CloseButtonProps) => {
-            return <button onClick={closeToast} className="absolute"></button>;
-          }}
-          hideProgressBar
-          newestOnTop
-          closeOnClick
-          rtl={false}
-          draggable
-          toastClassName={() =>
-            "rounded-lg border border-white/30 p-5 grid gap-4 bg-white/10 shadow-lg m-2"
-          }
-          className={() => "text-white text-base"}
-          toastStyle={
-            {
-              "--toastify-icon-color-error": "#ef4444",
-            } as React.CSSProperties
-          }
-        />
       </div>
-    </main>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Sidebar: The Circle */}
+        <aside className="lg:col-span-4 flex flex-col gap-6">
+          <div className="glass p-8 rounded-[3rem] relative overflow-hidden flex flex-col gap-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-orange-500/20 shadow-inner">
+                  <Image src={staticImages.playersIcon} alt="Players" width={20} height={20} className="opacity-80" />
+                </div>
+                <h3 className="text-white font-heading font-black text-lg tracking-tight uppercase">The Circle</h3>
+              </div>
+              <div className="text-[10px] font-black tracking-widest text-white/40 uppercase">
+                {players.length} Agents
+              </div>
+            </div>
+
+            {isLoadingRoom ? (
+               <div className="flex flex-col items-center justify-center gap-3 py-10 opacity-40">
+                 <Loader size="md" />
+                 <span className="text-[10px] uppercase tracking-widest">Syncing Identity...</span>
+               </div>
+            ) : (
+              <ul className="flex flex-col gap-3">
+                <AnimatePresence>
+                  {players.map((p: any, idx: number) => (
+                    <motion.li
+                      key={p.id}
+                      layout
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${
+                        p.id === playerId 
+                          ? "bg-white/10 border-white/20 shadow-lg" 
+                          : "bg-white/5 border-white/5"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          <Image
+                            src={playerAvatarSrcs.find(a => a.id === p.id)?.src || playerIcon.src}
+                            alt={p.name}
+                            width={36}
+                            height={36}
+                            className={`rounded-xl border ${p.id === playerId ? "border-yellow-400" : "border-white/10"}`}
+                          />
+                          {idx === 0 && <span className="absolute -top-1.5 -left-1.5 text-[10px]">👑</span>}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className={`text-sm font-bold truncate max-w-[120px] ${p.id === playerId ? "text-yellow-400" : "text-white"}`}>
+                            {p.name}
+                          </span>
+                          {p.id === playerId && <span className="text-[8px] font-black uppercase text-white/40">You</span>}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 px-2 py-1 rounded-lg bg-black/20">
+                         <span className="text-[10px] font-heading font-black text-orange-400">{p.impostorCount || 0}</span>
+                      </div>
+                    </motion.li>
+                  ))}
+                </AnimatePresence>
+              </ul>
+            )}
+          </div>
+        </aside>
+
+        {/* Main Interface */}
+        <div className="lg:col-span-8 flex flex-col gap-8">
+
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={phase}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.4 }}
+              className="flex flex-col gap-6"
+            >
+              {/* Lobby Phase Dashboard */}
+              {phase === "lobby" && (
+                <div className="glass p-10 rounded-[3rem] flex flex-col gap-8 relative overflow-hidden">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-2xl bg-teal-500/20 shadow-[0_0_20px_rgba(20,184,166,0.2)]">
+                      <Image src={staticImages.create} alt="Start" className="w-8 h-8" width={32} height={32} />
+                    </div>
+                    <div className="flex flex-col">
+                      <h2 className="text-2xl font-heading font-black tracking-tight text-white uppercase">Lobby Status: Open</h2>
+                      <span className="text-white/40 text-[10px] font-bold uppercase tracking-[0.3em]">Sector Synchronization in Progress</span>
+                    </div>
+                  </div>
+
+                  <p className="text-white/60 text-base leading-relaxed max-w-xl">
+                    The protocol requires a minimum of <span className="font-black text-yellow-400">3 agents</span> to initialize. 
+                    Ensure all tactical communication is conducted in person or via secure voice frequency.
+                  </p>
+
+                  <div className="flex flex-col gap-6 p-6 rounded-3xl bg-white/5 border border-white/10">
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <span className="text-white text-sm font-black tracking-widest uppercase">Ghost hints</span>
+                        <span className="text-white/40 text-xs">Gives the impostor an extra clue to blend in</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setShowHints(prev => !prev);
+                          try { await toggleHints(); } catch { setShowHints(prev => !prev); }
+                        }}
+                        disabled={!isOwner || isTogglingHints}
+                        className={`relative inline-flex h-7 w-12 items-center rounded-full transition-all duration-300 ${
+                          showHints ? "bg-orange-600" : "bg-white/10"
+                        } ${!isOwner ? "opacity-50 cursor-not-allowed" : ""}`}
+                      >
+                        <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${showHints ? "translate-x-6" : "translate-x-1"}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {isOwner && (
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className={btnStart + " py-6 text-xl"}
+                      onClick={startGame}
+                      disabled={players.length < 3 || isStartingGame}
+                      type="button"
+                    >
+                      {isStartingGame ? <Loader size="sm" /> : "INITIALIZE ROUND"}
+                    </motion.button>
+                  )}
+                </div>
+              )}
+
+              {/* Round Phase: Adaptive Interaction */}
+              {phase === "round" && (
+                <>
+                  {isMobile ? (
+                    <MobileOverlayCard
+                      isVisible={true}
+                      avatarSrc={myAvatarSrc}
+                      playerName={myPlayerName}
+                      myRole={myRole}
+                      myWord={myWord}
+                      myHint={myHint}
+                      showHints={showHints}
+                      isOwner={isOwner}
+                      isEndingGame={isEndingGame}
+                      endRound={endRound}
+                      isLoadingGameData={isLoadingGameData}
+                    />
+                  ) : (
+                    <div className="flex flex-col gap-8 items-center justify-center min-h-[400px]">
+                      <h2 className="text-white/40 text-xs font-black uppercase tracking-[0.5em] mb-4">Transmission Reveal</h2>
+                      
+                      <motion.div 
+                        onClick={() => setIsRevealed(!isRevealed)}
+                        className="relative w-full max-w-md aspect-[4/5] perspective-1000 cursor-pointer group"
+                      >
+                        <motion.div 
+                          className="relative w-full h-full transform-style-3d transition-transform duration-700"
+                          animate={{ rotateY: isRevealed ? 180 : 0 }}
+                        >
+                          {/* Front: Privacy Shield */}
+                          <div className="absolute inset-0 backface-hidden glass rounded-[3rem] border-2 border-white/20 flex flex-col items-center justify-center p-12 text-center group-hover:border-white/40 transition-colors">
+                            <div className="w-24 h-24 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-6 shadow-inner">
+                               <Image src={staticImages.key} alt="Secure" width={40} height={40} className="opacity-30 group-hover:opacity-100 transition-all group-hover:scale-110 duration-500" />
+                            </div>
+                            <h3 className="text-white font-heading font-black text-2xl tracking-tighter mb-2">IDENTITY SHIELDED</h3>
+                            <p className="text-white/40 text-sm font-medium">Click or hover to reveal your tactical objective.</p>
+                            
+                            <div className="mt-8 flex gap-1">
+                              {[1,2,3].map(i => (
+                                <div key={i} className="w-1.5 h-1.5 rounded-full bg-orange-500/40 animate-pulse" style={{ animationDelay: `${i*0.2}s` }} />
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Back: The Reveal */}
+                          <div className="absolute inset-0 backface-hidden glass rounded-[3rem] border-2 border-orange-500/50 flex flex-col items-center justify-center p-12 text-center [transform:rotateY(180deg)] bg-gradient-to-br from-orange-600/20 to-transparent">
+                            <span className="text-orange-400 text-xs font-black uppercase tracking-[0.4em] mb-4">
+                              {myRole === "impostor" ? "Infiltrator Identified" : "Crew"}
+                            </span>
+                            
+                            <div className="flex flex-col gap-2">
+                              <h3 className={`text-4xl md:text-5xl font-heading font-black tracking-tight drop-shadow-2xl ${myRole === "impostor" ? "text-red-500" : "text-white"}`}>
+                                {myRole === "impostor" ? "IMPOSTOR" : (myWord || "LOADING...")}
+                              </h3>
+                              {myRole === "impostor" && showHints && myHint && (
+                                <div className="mt-6 p-4 rounded-2xl bg-white/5 border border-white/10 italic text-white/80">
+                                   "Hint: {myHint}"
+                                </div>
+                              )}
+                            </div>
+
+                          </div>
+                        </motion.div>
+                      </motion.div>
+
+                      {isOwner && (
+                        <button
+                          className={btnEnd + " max-w-xs mt-8"}
+                          onClick={endRound}
+                          disabled={isEndingGame}
+                          type="button"
+                        >
+                          {isEndingGame ? <Loader size="sm" /> : "TERMINATE ROUND"}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* End Phase */}
+              {phase === "end" && (
+                <div className="glass p-12 rounded-[3rem] text-center flex flex-col items-center gap-6 border-orange-500/20">
+                  <div className="w-20 h-20 rounded-full bg-orange-500/20 flex items-center justify-center mb-2">
+                     <span className="text-4xl">🏁</span>
+                  </div>
+                  <h2 className="text-4xl font-heading font-black tracking-tighter text-white">ROUND CONCLUDED</h2>
+                  <p className="text-white/60 text-lg max-w-md">The circle has spoken. Analyze the results and prepare for the next deployment.</p>
+                  
+                  {isOwner ? (
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className={btnNew + " max-w-sm py-5 mt-4"}
+                      onClick={newGame}
+                      disabled={isStartingNewGame}
+                      type="button"
+                    >
+                      {isStartingNewGame ? <Loader size="sm" /> : "START NEW DEPLOYMENT"}
+                    </motion.button>
+                  ) : (
+                    <div className="px-8 py-4 rounded-2xl bg-white/5 border border-white/10 text-white/40 text-sm font-bold uppercase tracking-widest shadow-inner">
+                      Awaiting New Round Initialization...
+                    </div>
+                  )}
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
+
+      <ConfirmationModal
+        isOpen={isOpen}
+        onConfirm={handleConfirm}
+        onClose={closeModal}
+        title={modalConfig?.title ?? ""}
+        message={modalConfig?.message ?? ""}
+        confirmText={modalConfig?.confirmText}
+        cancelText={modalConfig?.cancelText}
+        type={modalConfig?.type}
+      />
+
+    </div>
   );
 }

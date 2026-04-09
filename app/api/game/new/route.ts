@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { firebaseStore } from "@/lib/firebase-store";
 import { WORDS } from "@/lib/words";
-import { pusherServer } from "@/lib/pusher";
+import { triggerPusherSafe } from "@/lib/pusher";
 
 export async function POST(req: NextRequest) {
   try {
@@ -43,10 +43,12 @@ export async function POST(req: NextRequest) {
       return { word: entry.word, hint: entry.hint, impostorId: impostor };
     });
     
-    // Trigger game-started event with complete game data
-    await pusherServer.trigger(`room-${roomId}`, "game-started", {
+    const roomAfter = await firebaseStore.getRoom(roomId);
+    const playersPayload = roomAfter?.players ?? room.players;
+
+    await triggerPusherSafe(`room-${roomId}`, "game-started", {
       gameId: game.id,
-      players: room.players,
+      players: playersPayload,
       game: {
         id: game.id,
         startedAt: game.startedAt,

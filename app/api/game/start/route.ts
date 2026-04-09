@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { firebaseStore } from "@/lib/firebase-store";
 import { WORDS } from "@/lib/words";
-import { pusherServer } from "@/lib/pusher";
+import { triggerPusherSafe } from "@/lib/pusher";
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Room not found" }, { status: 404 });
     }
     
-    await pusherServer.trigger(`room-${roomId}`, "game-started", {
+    await triggerPusherSafe(`room-${roomId}`, "game-started", {
       gameId: game.id,
       players: room.players,
     });

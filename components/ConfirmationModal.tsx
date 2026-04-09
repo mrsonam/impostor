@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -21,18 +22,6 @@ export default function ConfirmationModal({
   cancelText = "Cancel",
   type = "info",
 }: ConfirmationModalProps) {
-  // Prevent scroll when modal is open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [isOpen]);
-
   // Handle escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -50,30 +39,25 @@ export default function ConfirmationModal({
     };
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
-
   const getTypeStyles = () => {
     switch (type) {
       case "danger":
         return {
-          bg: "bg-red-600",
-          border: "border-red-400",
-          confirmBg: "bg-red-500 hover:bg-red-600",
-          confirmText: "text-white",
+          confirmBg: "bg-red-600 hover:bg-red-500 shadow-red-900/40",
+          confirmRing: "ring-red-500/50",
+          icon: "⚠️",
         };
       case "warning":
         return {
-          bg: "bg-[#656d4a]",
-          border: "border-[#333d29]",
-          confirmBg: "bg-[#333d29] hover:bg-[#414833]",
-          confirmText: "text-white",
+          confirmBg: "bg-orange-600 hover:bg-orange-500 shadow-orange-900/40",
+          confirmRing: "ring-orange-500/50",
+          icon: "⚡",
         };
       default:
         return {
-          bg: "bg-[#640d14]",
-          border: "border-yellow-200/30",
-          confirmBg: "bg-yellow-500 hover:bg-yellow-600",
-          confirmText: "text-white",
+          confirmBg: "bg-blue-600 hover:bg-blue-500 shadow-blue-900/40",
+          confirmRing: "ring-blue-500/50",
+          icon: "ℹ️",
         };
     }
   };
@@ -81,69 +65,67 @@ export default function ConfirmationModal({
   const styles = getTypeStyles();
 
   return (
-    <div
-      className="fixed inset-0 z-[5000] flex items-center justify-center p-4"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modal-title"
-      aria-describedby="modal-message"
-    >
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Modal Card */}
-      <div
-        className={`relative w-full max-w-md ${styles.bg} rounded-2xl shadow-2xl border ${styles.border} transform transition-all duration-300 ease-out`}
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: styles.bg === "bg-[#640d14]" ? "#640d14" : undefined,
-          boxShadow:
-            "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1)",
-        }}
-      >
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-white/10">
-          <h2
-            id="modal-title"
-            className="text-xl font-bold text-white text-center"
-          >
-            {title}
-          </h2>
-        </div>
-
-        {/* Content */}
-        <div className="px-6 py-4">
-          <p
-            id="modal-message"
-            className="text-white/90 text-center leading-relaxed"
-          >
-            {message}
-          </p>
-        </div>
-
-        {/* Actions */}
-        <div className="px-6 py-4 flex gap-3">
-          <button
+    <AnimatePresence>
+      {isOpen && (
+        <div className="absolute inset-0 z-[5000] flex items-center justify-center p-6 bg-black/40 backdrop-blur-md">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0"
             onClick={onClose}
-            className="flex-1 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-lg border border-white/20 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+          />
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ type: "spring", damping: 25, stiffness: 400 }}
+            className="glass relative w-full max-w-sm rounded-[2.5rem] p-8 overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
           >
-            {cancelText}
-          </button>
-          <button
-            onClick={() => {
-              onConfirm();
-              onClose();
-            }}
-            className={`flex-1 px-4 py-2.5 ${styles.confirmBg} ${styles.confirmText} font-semibold rounded-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-lg`}
-          >
-            {confirmText}
-          </button>
+            {/* Header / Icon */}
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center text-2xl shadow-inner border border-white/10">
+                {styles.icon}
+              </div>
+              <h2 className="font-heading font-extrabold text-2xl text-white tracking-wide">
+                {title}
+              </h2>
+              <p className="text-white/60 text-sm leading-relaxed max-w-[240px]">
+                {message}
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="mt-8 flex flex-col gap-3">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  onConfirm();
+                  onClose();
+                }}
+                className={`py-4 rounded-2xl ${styles.confirmBg} text-white font-heading font-bold tracking-widest shadow-xl ring-1 ring-inset ${styles.confirmRing} transition-all`}
+              >
+                {confirmText.toUpperCase()}
+              </motion.button>
+              
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={onClose}
+                className="py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-heading font-bold tracking-widest transition-all border border-white/10"
+              >
+                {cancelText.toUpperCase()}
+              </motion.button>
+            </div>
+
+            {/* Decor */}
+            <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/2 w-32 h-32 bg-white/[0.02] blur-3xl rounded-full" />
+          </motion.div>
         </div>
-      </div>
-    </div>
+      )}
+    </AnimatePresence>
   );
 }

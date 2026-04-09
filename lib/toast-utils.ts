@@ -5,13 +5,13 @@ import { toast } from 'react-toastify';
  */
 export const showErrorToast = (message: string) => {
   return toast.error(message, {
-    position: "bottom-center",
+    position: "bottom-right",
     autoClose: 3000,
-    hideProgressBar: true,
     closeOnClick: true,
     pauseOnHover: true,
     draggable: true,
-    className: "error-toast-custom",
+    className: "impostor-toast",
+    icon: false,
   });
 };
 
@@ -20,12 +20,13 @@ export const showErrorToast = (message: string) => {
  */
 export const showSuccessToast = (message: string) => {
   return toast.success(message, {
-    position: "bottom-center",
+    position: "bottom-right",
     autoClose: 2000,
-    hideProgressBar: true,
     closeOnClick: true,
     pauseOnHover: true,
     draggable: true,
+    className: "impostor-toast",
+    icon: false,
   });
 };
 
@@ -34,11 +35,12 @@ export const showSuccessToast = (message: string) => {
  */
 export const showInfoToast = (message: string) => {
   return toast.info(message, {
-    position: "bottom-center",
+    position: "bottom-right",
     autoClose: 2000,
-    hideProgressBar: true,
     closeOnClick: true,
     pauseOnHover: true,
     draggable: true,
+    className: "impostor-toast",
+    icon: false,
   });
 };

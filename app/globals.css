@@ -2,52 +2,241 @@
 
 :root {
   color-scheme: light;
+  --font-inter: "Inter", sans-serif;
+  --font-lexend: "Lexend", sans-serif;
 }
 html,
 body {
   height: 100%;
 }
 
-/* Custom error toast styling */
-.Toastify__toast--error {
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
+/* ── Impostor toast — "system broadcast" (solid panel, not glass) ─── */
+.impostor-toastify.Toastify__toast-container {
+  width: min(calc(100vw - 1.25rem), 22rem) !important;
+  padding: 0 0.5rem !important;
+  bottom: max(1rem, env(safe-area-inset-bottom, 0px)) !important;
 }
 
-.Toastify__toast--error .Toastify__toast-icon {
+.impostor-toastify.Toastify__toast-container--bottom-center {
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+}
+
+.impostor-toastify.Toastify__toast-container--bottom-right {
+  right: max(0.5rem, env(safe-area-inset-right, 0px)) !important;
+  align-items: flex-end !important;
+}
+
+/* Keep toasts on the right on small screens (library defaults to full-width / left). */
+@media only screen and (max-width: 480px) {
+  .impostor-toastify.Toastify__toast-container {
+    width: min(calc(100vw - 1rem), 22rem) !important;
+    max-width: min(calc(100vw - 1rem), 22rem) !important;
+    left: auto !important;
+    right: max(0.5rem, env(safe-area-inset-right, 0px)) !important;
+    margin: 0 !important;
+    align-items: flex-end !important;
+  }
+
+  .impostor-toastify.Toastify__toast-container--bottom-right {
+    left: auto !important;
+    right: max(0.5rem, env(safe-area-inset-right, 0px)) !important;
+    transform: none !important;
+  }
+
+  .Toastify__toast.impostor-toast {
+    width: 100% !important;
+    border-radius: 0.875rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+}
+
+.Toastify__toast.impostor-toast {
+  --toast-accent: #fb923c;
+  position: relative !important;
+  z-index: 0 !important;
+  width: 100% !important;
+  min-height: 4.75rem !important;
+  margin-bottom: 0.5rem !important;
+  padding: 0.875rem 0.625rem 0.875rem 0.875rem !important;
+  gap: 0.75rem !important;
+  flex-direction: row !important;
+  justify-content: flex-start !important;
+  align-items: center !important;
+  border-radius: 0.875rem !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: linear-gradient(168deg, #2a1419 0%, #150a0d 48%, #070304 100%) !important;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.07) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.45) inset,
+    0 18px 42px rgba(0, 0, 0, 0.55),
+    0 0 40px rgba(251, 146, 60, 0.06) !important;
+  font-family: var(--font-lexend), var(--font-inter), system-ui, sans-serif !important;
+}
+
+.Toastify__toast.impostor-toast::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.045;
+  background-image: url("https://grainy-gradients.vercel.app/noise.svg");
+  filter: contrast(130%);
+  z-index: -1;
+}
+
+.Toastify__toast.impostor-toast.Toastify__toast--success {
+  --toast-accent: #4ade80;
+}
+.Toastify__toast.impostor-toast.Toastify__toast--error {
+  --toast-accent: #f87171;
+}
+.Toastify__toast.impostor-toast.Toastify__toast--info {
+  --toast-accent: #38bdf8;
+}
+.Toastify__toast.impostor-toast.Toastify__toast--warning {
+  --toast-accent: #fbbf24;
+}
+.Toastify__toast.impostor-toast.Toastify__toast--default {
+  --toast-accent: #fb923c;
+}
+
+/* Message */
+.Toastify__toast.impostor-toast .Toastify__toast-body {
+  order: 2 !important;
   margin: 0 !important;
+  padding: 0 0.25rem 0 0 !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  gap: 0.2rem !important;
+  font-size: 0.8125rem !important;
+  font-weight: 600 !important;
+  line-height: 1.45 !important;
+  letter-spacing: 0.03em !important;
+  color: rgba(255, 250, 248, 0.96) !important;
+}
+
+.Toastify__toast.impostor-toast .Toastify__toast-body::before {
+  content: "TRANSMISSION";
+  font-size: 0.5625rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.28em !important;
+  text-transform: uppercase !important;
+  color: color-mix(in srgb, var(--toast-accent) 72%, rgba(255, 255, 255, 0.9)) !important;
+  opacity: 0.92 !important;
+}
+
+@media (min-width: 640px) {
+  .Toastify__toast.impostor-toast .Toastify__toast-body {
+    font-size: 0.9375rem !important;
+  }
+}
+
+/* Close — pinned to the far right (do not use margin shorthand; it clears margin-left: auto). */
+.Toastify__toast.impostor-toast .Toastify__close-button {
+  order: 10 !important;
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  align-self: center !important;
   flex-shrink: 0 !important;
-}
-
-.Toastify__toast--error .Toastify__toast-body {
+  width: 2rem !important;
+  height: 2rem !important;
   display: flex !important;
   align-items: center !important;
-  gap: 8px !important;
-  margin: 0 !important;
+  justify-content: center !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  margin-right: 0 !important;
+  margin-left: auto !important;
   padding: 0 !important;
+  border-radius: 9999px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.55) !important;
+  opacity: 1 !important;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease !important;
 }
 
-/* Custom error toast class */
-.error-toast-custom {
-  width: 98% !important;
-  margin: 4px !important;
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  color: white !important;
-  @apply rounded-lg border border-white/30 bg-white/10 shadow-lg;
+.Toastify__toast.impostor-toast .Toastify__close-button:hover,
+.Toastify__toast.impostor-toast .Toastify__close-button:focus {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
 }
 
-.error-toast-custom .Toastify__toast-icon {
-  margin: 0 !important;
-  flex-shrink: 0 !important;
+.Toastify__toast.impostor-toast .Toastify__close-button > svg {
+  width: 0.7rem !important;
+  height: 0.85rem !important;
 }
 
-.error-toast-custom .Toastify__toast-body {
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  margin: 0 !important;
-  padding: 0 !important;
+/* Hide scrollbar but allow scrolling */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+/* Premium Aesthetic Utilities */
+.glass {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.noise {
+  position: relative;
+}
+
+.noise::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("https://grainy-gradients.vercel.app/noise.svg");
+  filter: contrast(150%) brightness(100%);
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.02); opacity: 0.9; }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 3s ease-in-out infinite;
+}
+
+/* 3D Flip Utilities */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }

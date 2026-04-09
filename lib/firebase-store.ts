@@ -120,6 +120,8 @@ class FirebaseStore {
     const room = roomData as Room;
     if (room.players.length < 3) throw new Error("Need at least 3 players");
 
+    if (!room.usedWords) room.usedWords = [];
+
     const { word, hint, impostorId } = picker(room.players);
     
     // Increment impostor count for the selected impostor
