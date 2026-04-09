@@ -1,16 +1,10 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
+import { useLayoutEffect, useRef } from "react";
 import Image from "next/image";
-import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
-import { showErrorToast } from "@/lib/toast-utils";
+import { motion } from "framer-motion";
+import { MobileAvatarCarousel, type HomeAvatarOption } from "@/components/MobileAvatarCarousel";
 
-export type HomeAvatarOption = {
-  src: string;
-  alt: string;
-  icon: string;
-  full: string;
-  characterName: string;
-};
+export type { HomeAvatarOption };
 
 interface MobileHomeViewProps {
   name: string;
@@ -51,34 +45,24 @@ export default function MobileHomeView({
   busy,
   avatars,
 }: MobileHomeViewProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  
-  // Custom Avatar Carousel (Horizontal Swipe)
-  function MobileAvatarCarousel() {
-    return (
-      <div className="flex gap-4 overflow-x-auto px-4 pb-4 no-scrollbar snap-x snap-mandatory">
-        {avatars.map((a) => (
-          <motion.button
-            key={a.src}
-            whileTap={{ scale: 0.9 }}
-            className={`relative flex-shrink-0 w-24 aspect-square rounded-[2rem] overflow-hidden border-2 snap-center transition-all ${
-              avatar === a.src ? "border-orange-500 scale-110 shadow-lg" : "border-white/10"
-            }`}
-            onClick={() => {
-              setAvatar(a.src);
-              setAvatarFull(a.full);
-              setName(a.characterName);
-            }}
-          >
-            <Image src={a.icon} alt={a.alt} fill className="object-cover" />
-          </motion.button>
-        ))}
-      </div>
-    );
-  }
+  const scrollRootRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const root = scrollRootRef.current;
+    if (root) root.scrollTop = 0;
+  }, []);
+
+  const handleAvatarSelect = (a: HomeAvatarOption) => {
+    setAvatar(a.src);
+    setAvatarFull(a.full);
+    setName(a.characterName);
+  };
 
   return (
-    <div className="h-full w-full overflow-y-auto snap-y snap-mandatory scroll-smooth no-scrollbar">
+    <div
+      ref={scrollRootRef}
+      className="h-dvh min-h-0 w-full overflow-y-auto overscroll-y-contain snap-y snap-mandatory scroll-smooth no-scrollbar touch-pan-y"
+    >
       {/* Section 1: Join Frequency */}
       <section className="h-full min-h-screen w-full flex flex-col p-6 snap-start">
         <div className="flex-1 flex flex-col justify-center gap-10">
@@ -91,7 +75,11 @@ export default function MobileHomeView({
             <div className="space-y-6">
               <div className="flex flex-col gap-3">
                  <span className="text-[10px] font-black uppercase tracking-widest text-white/30 px-1">Identity Variant</span>
-                 <MobileAvatarCarousel />
+                 <MobileAvatarCarousel
+                   avatars={avatars}
+                   selectedSrc={avatar}
+                   onSelect={handleAvatarSelect}
+                 />
               </div>
 
               <div className="space-y-4">
@@ -154,7 +142,11 @@ export default function MobileHomeView({
             <div className="space-y-6">
               <div className="flex flex-col gap-3">
                  <span className="text-[10px] font-black uppercase tracking-widest text-white/30 px-1">Commander Avatar</span>
-                 <MobileAvatarCarousel />
+                 <MobileAvatarCarousel
+                   avatars={avatars}
+                   selectedSrc={avatar}
+                   onSelect={handleAvatarSelect}
+                 />
               </div>
 
               <div className="space-y-4">

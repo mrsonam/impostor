@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useLayoutEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import door from "@/app/assets/images/door.png";
@@ -50,12 +50,6 @@ export default function Home() {
   const [avatar, setAvatar] = useState(AVATARS[0].src);
   const [avatarFull, setAvatarFull] = useState(AVATARS[0].full);
   const [showHints, setShowHints] = useState(true);
-
-  const [showSolidBg, setShowSolidBg] = useState(true);
-  useEffect(() => {
-    const t = setTimeout(() => setShowSolidBg(false), 2000);
-    return () => clearTimeout(t);
-  }, []);
 
   async function createRoom() {
     setBusy(true);
@@ -134,19 +128,12 @@ export default function Home() {
   const isMobile = useIsMobile();
   const { isOpen, openModal, closeModal, modalConfig, handleConfirm } = useConfirmationModal();
 
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   return (
     <div className="relative min-h-full">
-      <AnimatePresence>
-        {showSolidBg && (
-          <motion.div
-            initial={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.5 }}
-            className="absolute inset-0 z-[1000] bg-[#640d14] pointer-events-none"
-          />
-        )}
-      </AnimatePresence>
-
       <AnimatePresence mode="wait">
         {isMobile ? (
           <MobileHomeView
@@ -168,7 +155,6 @@ export default function Home() {
         ) : (
           <main
             className="flex-1 w-full max-w-7xl mx-auto px-8 lg:px-16 relative z-20 flex flex-col justify-center"
-            style={showSolidBg ? { pointerEvents: "none" } : {}}
           >
             <motion.div
               initial={{ opacity: 0, y: 20 }}

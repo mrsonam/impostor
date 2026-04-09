@@ -20,18 +20,20 @@ The UI is tuned for both desktop and mobile, with real-time updates so everyone 
 - Room and game state stored in Firebase  
 - Rounds with roles, words, optional impostor hints, and word rotation across games  
 - Host controls: start game, end round, new game, toggle hints, kick player  
-- Responsive layout and touch-friendly room experience  
+- Responsive layout and touch-friendly room experience
 
 ## Tech stack
 
-| Layer | Choice |
-|--------|--------|
-| Framework | [Next.js](https://nextjs.org) (App Router), React 19, TypeScript |
-| Styling | [Tailwind CSS](https://tailwindcss.com) v4 |
-| Motion | [Framer Motion](https://www.framer.com/motion/) |
-| Realtime | [Pusher](https://pusher.com) |
-| Data | [Firebase](https://firebase.google.com) (Firestore-style usage via project helpers) |
-| Notifications | [react-toastify](https://fkhadra.github.io/react-toastify/) |
+
+| Layer         | Choice                                                                              |
+| ------------- | ----------------------------------------------------------------------------------- |
+| Framework     | [Next.js](https://nextjs.org) (App Router), React 19, TypeScript                    |
+| Styling       | [Tailwind CSS](https://tailwindcss.com) v4                                          |
+| Motion        | [Framer Motion](https://www.framer.com/motion/)                                     |
+| Realtime      | [Pusher](https://pusher.com)                                                        |
+| Data          | [Firebase](https://firebase.google.com) (Firestore-style usage via project helpers) |
+| Notifications | [react-toastify](https://fkhadra.github.io/react-toastify/)                         |
+
 
 ## Getting started locally
 
@@ -43,19 +45,21 @@ npm install
 
 Create a `.env.local` file in the project root with your Firebase client config and Pusher credentials (server and client where noted):
 
-| Variable | Purpose |
-|----------|---------|
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | Firebase web API key |
-| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Auth domain |
-| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Project ID |
-| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | Storage bucket |
-| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Messaging sender ID |
-| `NEXT_PUBLIC_FIREBASE_APP_ID` | App ID |
-| `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | Analytics (optional) |
-| `NEXT_PUBLIC_PUSHER_KEY` | Pusher app key (client) |
-| `NEXT_PUBLIC_PUSHER_CLUSTER` | Pusher cluster, e.g. `eu` |
-| `PUSHER_APP_ID` | Pusher app ID (server) |
-| `PUSHER_SECRET` | Pusher secret (server) |
+
+| Variable                                   | Purpose                   |
+| ------------------------------------------ | ------------------------- |
+| `NEXT_PUBLIC_FIREBASE_API_KEY`             | Firebase web API key      |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`         | Auth domain               |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID`          | Project ID                |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`      | Storage bucket            |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Messaging sender ID       |
+| `NEXT_PUBLIC_FIREBASE_APP_ID`              | App ID                    |
+| `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID`      | Analytics (optional)      |
+| `NEXT_PUBLIC_PUSHER_KEY`                   | Pusher app key (client)   |
+| `NEXT_PUBLIC_PUSHER_CLUSTER`               | Pusher cluster, e.g. `eu` |
+| `PUSHER_APP_ID`                            | Pusher app ID (server)    |
+| `PUSHER_SECRET`                            | Pusher secret (server)    |
+
 
 Run the dev server:
 
@@ -73,13 +77,15 @@ npm run dev:fresh
 
 Other scripts:
 
-| Script | Command |
-|--------|---------|
-| Production build | `npm run build` |
-| Start production server | `npm run start` |
-| Lint | `npm run lint` |
-| Clean `.next` | `npm run clean` |
-| Dev with Turbopack | `npm run dev:turbo` |
+
+| Script                  | Command             |
+| ----------------------- | ------------------- |
+| Production build        | `npm run build`     |
+| Start production server | `npm run start`     |
+| Lint                    | `npm run lint`      |
+| Clean `.next`           | `npm run clean`     |
+| Dev with Turbopack      | `npm run dev:turbo` |
+
 
 ## Deploying
 
